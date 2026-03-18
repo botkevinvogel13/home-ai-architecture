@@ -911,98 +911,157 @@ mode: single
 
 ---
 
-# Part 7: x86 Proxmox Setup
+# Part 7: x86 Proxmox Setup (NemoClaw Edition)
 
-## Hardware Selection Rationale
+## Overview
 
-The Proxmox machine runs two VMs continuously. Requirements:
+The Proxmox machine runs three things continuously:
+- **OpenClaw VM** — your AI assistant, running inside a **NemoClaw sandbox** (hardened by NVIDIA OpenShell)
+- **Agent Swarm VM** — autonomous coding agents (Claude Code, Codex, OpenHands)
+- **NemoClaw / OpenShell** — intercepts all inference calls and routes them to NVIDIA cloud (or local Ollama later)
 
-- **CPU:** Needs enough cores to give 4 to OpenClaw VM + 8+ to Agent Swarm VM
-- **RAM:** 8GB for OpenClaw + 48GB+ for agents (agents are memory-hungry) = 64GB minimum, 128GB preferred
-- **Storage:** 64GB OS + 64GB OpenClaw VM + 500GB+ for Agent Swarm = 1TB+ NVMe
-- **Form Factor:** Small, quiet, always-on
+In Phase 1, inference routes to **NVIDIA cloud** for free via `nvidia/nemotron-3-super-120b-a12b`.
+In Phase 2, when the Mac Studio arrives, you swap one config line to point at local Ollama instead.
 
-### Recommended: Minisforum MS-01
+---
+
+## Hardware Selection
+
+### Requirements
+
+| Resource | Phase 1 (Now) | Phase 2 (Mac Studio added) |
+|----------|--------------|--------------------------|
+| CPU | 14+ cores | Same |
+| RAM | 64GB minimum, **128GB recommended** | Same |
+| Storage | 1TB NVMe | 1TB NVMe (OS) + 1TB (Agent Swarm) |
+| Network | 2.5GbE + 10GbE | Same |
+| OS | Ubuntu 22.04 LTS (or Proxmox host + Ubuntu VM) | Same |
+
+> **Why 128GB?** NemoClaw + OpenShell adds overhead beyond plain OpenClaw.
+> OpenShell runs k3s, a sandbox container image (~2.4GB), and an OpenShell gateway alongside your VMs.
+> On top of that: OpenClaw VM (8GB) + Agent Swarm VM (64GB) + Proxmox host OS (~4GB) = 76GB minimum.
+> 128GB gives you comfortable headroom and lets you expand the agent swarm later.
+
+---
+
+### Recommended: Minisforum MS-01 i9-12900H (128GB DIY)
+
+The MS-01 is the machine specified in this architecture. It supports **2x SO-DIMM DDR5 slots**,
+each upgradeable to 64GB, for a 128GB total. Minisforum sells it pre-configured with 32GB;
+you upgrade the RAM yourself.
 
 | Spec | Value |
 |------|-------|
-| CPU | Intel Core i9-12900H (14 cores, 20 threads) |
-| RAM | 64GB DDR5 (upgradeable to 128GB) |
-| Storage | 1TB NVMe PCIe 4.0 (add 2nd NVMe for agent storage) |
-| Network | 2.5GbE + 10GbE (SFP+) |
+| CPU | Intel Core i9-12900H (14 cores, 20 threads, up to 5.0GHz) |
+| RAM | 2x SO-DIMM DDR5 slots → **self-upgrade to 128GB** |
+| Storage | 2x M.2 NVMe PCIe 4.0 slots |
+| Network | **2x 2.5GbE + 2x 10GbE SFP+** |
 | Size | 197 × 172 × 55mm |
-| Price | ~$500–600 (64GB config) |
-| Link | [minisforum.com/ms-01](https://minisforum.com/) |
+| Price | ~$768 (32GB/1TB config) + ~$160 (2x64GB DDR5 SO-DIMM) = **~$930** |
+| Link | [minisforum.com/product/ms-01](https://www.minisforum.com/product/ms-01/) |
 
-**Alternative:** Beelink SEi12 Pro or Intel NUC 13 Pro (similar specs).
+**DIY RAM upgrade:**
+Buy 2x 64GB DDR5-4800 SO-DIMM (Crucial or Kingston). The MS-01 takes standard laptop DDR5.
+Total with RAM: ~$900–950.
 
-**Upgrade path:** 128GB RAM variant of MS-01 (~$700) for running larger agent swarms.
+> **Barebone option:** Buy the i9-12900H Barebone ($479.90) + your own 2x64GB DDR5 + 1-2TB NVMe
+> for even lower cost (~$700–750 total).
+
+---
+
+### Alternative: Minisforum MS-02 Ultra (192GB ECC, Ready-to-Run)
+
+If you want to skip the DIY RAM upgrade and get a newer machine that's ready to go:
+
+| Spec | Value |
+|------|-------|
+| CPU | Intel Core Ultra 9 285HX (24 cores, 5.4GHz boost) |
+| RAM | **192GB DDR5 ECC** (pre-configured, 4-channel) |
+| Storage | 2TB NVMe |
+| Network | 2x 2.5GbE + 2x 10GbE SFP+ |
+| Price | **$2,999** |
+| Link | [minisforum.com/product/ms-02-ultra](https://www.minisforum.com/product/ms-02-ultra/) |
+
+The 285HX is a significantly newer/faster chip than the 12900H. 192GB ECC gives you room
+to run much larger agent swarms. This is the "buy once, don't upgrade for 5 years" option.
+
+---
+
+### Alternative: Minisforum MS-S1 MAX (128GB, AMD + Integrated GPU)
+
+| Spec | Value |
+|------|-------|
+| CPU | AMD Ryzen AI Max+ 395 (16 cores) |
+| RAM | **128GB unified memory** (shared CPU + GPU) |
+| GPU | AMD Radeon 890M (40 CUs) — can run local AI inference |
+| Storage | 2TB NVMe |
+| Price | **$2,919.90** |
+| Link | [minisforum.com/product/ms-s1-max](https://www.minisforum.com/product/ms-s1-max/) |
+
+Unique advantage: the integrated Radeon 890M shares all 128GB as VRAM.
+You could run ~7B–13B parameter models locally on this machine via Ollama **without** the Mac Studio,
+making it a potential standalone AI inference machine as well as a Proxmox host.
+Phase 2 upgrade (Mac Studio) becomes optional if this fits your budget now.
+
+---
+
+### Decision Guide
+
+| Budget | Choice | RAM | Ready to run? |
+|--------|--------|-----|--------------|
+| ~$930 | MS-01 i9-12900H + DIY 128GB DDR5 | 128GB | Needs RAM swap |
+| ~$1,500 | MS-01 i9-12900H Barebone + DIY RAM + 2nd NVMe | 128GB | Some assembly |
+| ~$2,920 | MS-S1 MAX | 128GB + integrated GPU | ✅ Yes |
+| ~$3,000 | MS-02 Ultra 192GB ECC | 192GB ECC | ✅ Yes |
 
 ---
 
 ## Step 1: Install Proxmox VE
 
-### Create Bootable USB
-
 ```bash
 # Download Proxmox VE ISO: https://www.proxmox.com/en/downloads
 # Flash to USB (on Mac/Linux):
 sudo dd if=proxmox-ve_8.x.iso of=/dev/sdX bs=4M status=progress
-
-# On Windows: use Rufus or Balena Etcher
+# Or use Balena Etcher on Windows
 ```
 
-### Proxmox Installation
+### Installation
 
-1. Boot MS-01 from USB (spam DEL or F7 during POST for boot menu)
+1. Boot from USB (DEL or F7 during POST for boot menu on MS-01/MS-02)
 2. Select **Install Proxmox VE (Graphical)**
 3. Accept EULA
-4. **Target disk:** Select 1TB NVMe (this will be erased)
-5. **Country/Timezone/Keyboard:** Set appropriately
-6. **Root password:** Use a strong password. Save it.
-7. **Network config:**
-   - Management interface: `enp2s0` (or whichever is 2.5GbE)
-   - Hostname: `proxmox.local`
-   - IP: `192.168.1.20/24`
-   - Gateway: `192.168.1.1`
-   - DNS: `192.168.1.1`
-8. Review → **Install**
-9. Remove USB when prompted, system will reboot
+4. **Target disk:** Primary NVMe
+5. Set hostname: `proxmox.local`
+6. IP: `192.168.1.20/24` / Gateway: `192.168.1.1`
+7. Install → reboot
 
-Access Proxmox web UI: `https://192.168.1.20:8006` (accept self-signed cert)
+Access Proxmox web UI: `https://192.168.1.20:8006`
 
 ---
 
 ## Step 2: Post-Install Hardening
 
 ```bash
-# SSH into Proxmox
 ssh root@192.168.1.20
 
-# Update system
+# Update
 apt update && apt full-upgrade -y
 
-# Remove enterprise repo (requires subscription), add community repo
+# Switch to community repo (no subscription required)
 rm /etc/apt/sources.list.d/pve-enterprise.list
 echo "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription" \
   > /etc/apt/sources.list.d/pve-community.list
 apt update
 
-# Disable subscription nag (optional)
-sed -i.bak "s/data.status !== 'Active'/false/g" \
-  /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
-
-# Install useful tools
-apt install -y htop iotop curl wget git ufw
-
-# Configure UFW firewall
+# Firewall
+apt install -y ufw
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow from 192.168.1.0/24 to any port 22   # SSH from LAN only
-ufw allow from 192.168.1.0/24 to any port 8006 # Proxmox UI from LAN only
+ufw allow from 192.168.1.0/24 to any port 22
+ufw allow from 192.168.1.0/24 to any port 8006
 ufw enable
 
-# Set up automatic security updates
+# Auto security updates
 apt install -y unattended-upgrades
 dpkg-reconfigure --priority=low unattended-upgrades
 ```
@@ -1011,30 +1070,18 @@ dpkg-reconfigure --priority=low unattended-upgrades
 
 ## Step 3: VM Network Design
 
-Proxmox uses Linux bridges. We'll create two bridges:
+Create two bridges in Proxmox:
 
-- `vmbr0` — VLAN 1 (trusted/main) — for OpenClaw VM
-- `vmbr1` — VLAN 20 (agent swarm, isolated) — for Agent Swarm VM
+```
+vmbr0 — VLAN 1 (trusted, main) — for OpenClaw/NemoClaw VM
+vmbr1 — VLAN 20 (isolated)    — for Agent Swarm VM
+```
 
 In Proxmox UI: **Node → System → Network → Create → Linux Bridge**
 
-```
-Bridge 1 (vmbr0):
-  Name: vmbr0
-  Bridge ports: enp2s0 (your main NIC)
-  Comment: Main LAN / VLAN 1
-
-Bridge 2 (vmbr1):
-  Name: vmbr1
-  Bridge ports: (none — internal only, or tag on switch as VLAN 20)
-  Comment: Agent Swarm / VLAN 20
-```
-
-Or via CLI:
+Or via `/etc/network/interfaces`:
 
 ```bash
-# /etc/network/interfaces — add:
-
 auto vmbr1
 iface vmbr1 inet static
     address 192.168.20.1/24
@@ -1045,63 +1092,57 @@ iface vmbr1 inet static
 ```
 
 ```bash
-# Apply network changes
 ifreload -a
+
+# Enable IP forwarding + NAT for Agent Swarm
+echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
+sysctl -p
+
+iptables -t nat -A POSTROUTING -s 192.168.20.0/24 -o vmbr0 -j MASQUERADE
+iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.10 -p tcp --dport 11434 -j ACCEPT
+iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.21 -j DROP
+iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.0/24 -j DROP
+iptables -A FORWARD -s 192.168.20.0/24 -o vmbr0 -p tcp -m multiport --dports 80,443 -j ACCEPT
+iptables -A FORWARD -s 192.168.20.0/24 -j DROP
+
+apt install -y iptables-persistent
+netfilter-persistent save
 ```
 
 ---
 
-## Step 4: Create OpenClaw VM
+## Step 4: Create OpenClaw VM (NemoClaw Host)
 
 In Proxmox UI: **Create VM**
 
 ```
-General:
-  VM ID: 100
-  Name: openclaw
+VM ID:    100
+Name:     openclaw-nemoclaw
 
-OS:
-  ISO: Upload Ubuntu 22.04 LTS server ISO
-  (Upload via Datacenter → Storage → local → Upload)
-
-System:
-  Machine: q35
-  BIOS: OVMF (UEFI)
-  Add EFI Disk: yes (1MB)
+OS:       Ubuntu 22.04 LTS Server ISO
 
 Disk:
   Bus: VirtIO SCSI
-  Storage: local-lvm
-  Size: 64GB
+  Size: 80GB        ← NemoClaw needs more space than plain OpenClaw
+                       (OpenShell sandbox image is ~2.4GB compressed)
 
 CPU:
-  Sockets: 1
   Cores: 4
-  Type: host (for best performance)
+  Type: host
 
 Memory:
-  RAM: 8192 MB (8GB)
+  RAM: 16384 MB (16GB)   ← Bumped from 8GB; OpenShell + k3s needs headroom
 
 Network:
   Bridge: vmbr0
   Model: VirtIO
-  VLAN Tag: (none — this is native VLAN 1)
-
-Confirm → Finish
 ```
 
-### Install Ubuntu 22.04 on OpenClaw VM
+### Install Ubuntu 22.04 on the VM
 
-Start VM → Open console → Follow Ubuntu installer:
-
-```
-# During install:
-Network: configure DHCP first, set static after
-Hostname: openclaw
-Username: ubuntu (or your preference)
-Install OpenSSH: YES
-
-# After install — set static IP:
+```bash
+# After Ubuntu install, set static IP:
 sudo nano /etc/netplan/00-installer-config.yaml
 ```
 
@@ -1121,264 +1162,249 @@ network:
 
 ```bash
 sudo netplan apply
-```
 
----
-
-## Step 5: Create Agent Swarm VM
-
-```
-General:
-  VM ID: 101
-  Name: agent-swarm
-
-OS:
-  ISO: Ubuntu 22.04 LTS (same ISO)
-
-Disk:
-  Bus: VirtIO SCSI
-  Size: 500GB
-
-CPU:
-  Cores: 8 (or all remaining — i9-12900H has 14 cores, leave 4 for system + OpenClaw)
-  Type: host
-
-Memory:
-  RAM: 49152 MB (48GB)  — adjust based on total RAM minus OpenClaw's 8GB
-
-Network:
-  Bridge: vmbr1  ← ISOLATED BRIDGE
-  Model: VirtIO
-```
-
-Set static IP:
-
-```yaml
-# /etc/netplan/00-installer-config.yaml
-network:
-  version: 2
-  ethernets:
-    ens18:
-      addresses:
-        - 192.168.20.10/24
-      routes:
-        - to: default
-          via: 192.168.20.1  # Proxmox host acts as gateway
-      nameservers:
-        addresses: [8.8.8.8, 1.1.1.1]
-```
-
-### Enable IP Forwarding on Proxmox (for Agent Swarm internet access)
-
-```bash
-# On Proxmox host:
-echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
-sysctl -p
-
-# NAT for Agent Swarm internet access
-iptables -t nat -A POSTROUTING -s 192.168.20.0/24 -o vmbr0 -j MASQUERADE
-
-# FORWARD rules — ORDER MATTERS: specific rules before broad ones
-
-# 1. Allow established/related connections (important for stateful traffic)
-iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-
-# 2. Allow Agent Swarm to reach ONLY Mac Studio port 11434
-iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.10 -p tcp --dport 11434 -j ACCEPT
-
-# 3. Block Agent Swarm from reaching OpenClaw VM (before broad internet ACCEPT)
-iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.21 -j DROP
-
-# 4. Block Agent Swarm from rest of trusted LAN (before broad internet ACCEPT)
-iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.0/24 -j DROP
-
-# 5. Allow Agent Swarm internet access (git, npm, pip, package registries)
-iptables -A FORWARD -s 192.168.20.0/24 -o vmbr0 -p tcp -m multiport --dports 80,443 -j ACCEPT
-
-# 6. Drop everything else from Agent Swarm
-iptables -A FORWARD -s 192.168.20.0/24 -j DROP
-
-# Persist rules
-apt install -y iptables-persistent
-netfilter-persistent save
-```
-
-```bash
-# Verify rules are correct
-iptables -L FORWARD -n -v --line-numbers
-# Rules should appear in the order above
-```
-
-### Verify Proxmox Is Routing Correctly Between Networks
-
-```bash
-# On Proxmox host:
-
-# Check both bridges exist and are up
-ip addr show vmbr0   # Should show 192.168.1.20/24
-ip addr show vmbr1   # Should show 192.168.20.1/24
-
-# Check IP forwarding is enabled
-cat /proc/sys/net/ipv4/ip_forward
-# Expected: 1
-
-# Check NAT rule is active
-iptables -t nat -L POSTROUTING -n -v
-# Should show MASQUERADE rule for 192.168.20.0/24
-
-# Check FORWARD rules are correct and in right order
-iptables -L FORWARD -n -v --line-numbers
-```
-
-### Verify Agent Swarm VM Can Reach Mac Studio
-
-```bash
-# From Agent Swarm VM (after iptables rules are set):
-ip route show
-# Should show: default via 192.168.20.1
-
-traceroute 192.168.1.10
-# Should hop through 192.168.20.1 then reach 192.168.1.10
-
-curl http://192.168.1.10:11434/api/tags
-# Should return model list JSON
-```
-
----
-
-## Step 6: Install OpenClaw on OpenClaw VM
-
-```bash
-# SSH into OpenClaw VM
-ssh ubuntu@192.168.1.21
-
-# Install Node.js 22
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-
-# Install OpenClaw
-# Refer to official installation docs at: https://openclaw.ai/docs/install
-# The following commands reflect the current installation method as of this writing.
-# If these fail, check the latest instructions at the URL above.
-
-# Method 1: Direct install (most common)
-curl -fsSL https://get.openclaw.ai | bash
-
-# After installation, verify:
-openclaw --version
-
-# Initialize OpenClaw (interactive setup — follow prompts):
-# This will ask you to:
-# 1. Authenticate with your OpenClaw account
-# 2. Link your WhatsApp number (scan QR code)
-# 3. Configure your workspace
-openclaw init
-
-# Set Ollama as the LLM backend:
-openclaw config set llm.provider ollama
-openclaw config set llm.host http://192.168.1.10:11434
-openclaw config set llm.model llama3.1:8b
-
-# Start OpenClaw as a background service:
-openclaw start
-
-# Enable auto-start on system boot:
-openclaw service install
-openclaw service start
-
-# Verify OpenClaw is running and connected:
-openclaw status
-# Expected output: Connected | WhatsApp: linked | LLM: ollama@192.168.1.10:11434
-```
-
-> **Note:** If any of the above commands fail, run `openclaw help` and consult https://openclaw.ai/docs for the current installation procedure. OpenClaw's CLI interface may update over time.
-
----
-
-## Step 7: Install Docker and Agent Frameworks on Agent Swarm VM
-
-```bash
-# SSH into Agent Swarm VM
-ssh ubuntu@192.168.20.10
-
-# Install Docker
+# Install Docker (required by NemoClaw/OpenShell)
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker ubuntu
+sudo usermod -aG docker $USER
 newgrp docker
 
-# Verify Docker
-docker run hello-world
-
-# Install Node.js (for Claude Code, Codex CLIs)
+# Install Node.js 22 (required by NemoClaw)
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 
-# Install Python (for OpenHands and tooling)
-sudo apt install -y python3 python3-pip python3-venv
-
-# Install Claude Code CLI
-npm install -g @anthropic-ai/claude-code
-
-# Configure Claude Code to use local Ollama
-# Claude Code supports OpenAI-compatible APIs via environment variables
-export ANTHROPIC_API_KEY="ollama"  # Dummy value
-export ANTHROPIC_BASE_URL="http://192.168.1.10:11434/v1"
-
-# Or add to /etc/environment permanently:
-echo 'ANTHROPIC_BASE_URL=http://192.168.1.10:11434/v1' | sudo tee -a /etc/environment
-
-# Note: Claude Code works best with Anthropic's actual API for complex coding tasks.
-# For local model use, OpenHands or direct Ollama API calls are often better.
-# You may want to keep the real ANTHROPIC_API_KEY for Claude Code
-# and use local Ollama for lighter agent tasks via OpenHands.
-
-# Install OpenAI Codex CLI
-npm install -g @openai/codex
-
-# Set environment variables for agent API keys
-# (Add to /etc/environment or per-user .bashrc)
-echo 'ANTHROPIC_API_KEY=your_anthropic_key_here' | sudo tee -a /etc/environment
-echo 'OPENAI_API_KEY=your_openai_key_here' | sudo tee -a /etc/environment
-
-# Configure agents to use local Ollama on Mac Studio
-echo 'OLLAMA_HOST=http://192.168.1.10:11434' | sudo tee -a /etc/environment
-
-# For OpenAI-compatible apps pointing to local Ollama:
-echo 'OPENAI_BASE_URL=http://192.168.1.10:11434/v1' | sudo tee -a /etc/environment
-echo 'OPENAI_API_KEY=ollama' | sudo tee -a /etc/environment  # dummy key
-
-source /etc/environment
+# Verify versions
+node --version   # Must be >= 20
+npm --version    # Must be >= 10
+docker --version
 ```
 
-### Install OpenHands (via Docker)
+---
+
+## Step 5: Install NemoClaw
+
+> **Important:** NemoClaw currently requires a fresh OpenClaw installation.
+> Run this on the OpenClaw VM (not the Proxmox host).
 
 ```bash
-# OpenHands self-hosted setup
-mkdir -p ~/openhands
-cd ~/openhands
+# SSH into the OpenClaw VM
+ssh ubuntu@192.168.1.21
 
-# Create docker-compose.yml
-cat > docker-compose.yml << 'EOF'
-services:
-  openhands:
-    image: ghcr.io/all-hands-ai/openhands:main
-    ports:
-      - "3000:3000"
-    environment:
-      - SANDBOX_RUNTIME_CONTAINER_IMAGE=ghcr.io/all-hands-ai/runtime:main
-      - LLM_API_KEY=ollama
-      - LLM_BASE_URL=http://192.168.1.10:11434
-      - LLM_MODEL=ollama/qwen2.5-coder:32b
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.openhands-state:/.openhands-state
-    restart: unless-stopped
-EOF
+# Run the NemoClaw installer
+curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 
-docker compose up -d
-
-# Access OpenHands UI at: http://192.168.20.10:3000
+# If `nemoclaw` is not found after install, refresh PATH:
+source ~/.bashrc
 ```
+
+The installer will:
+1. Verify Node.js + npm versions
+2. Install OpenShell (NVIDIA's sandbox runtime + k3s)
+3. Install the `nemoclaw` CLI
+4. Run `nemoclaw onboard` automatically
+
+### NemoClaw Onboard Wizard
+
+```
+$ nemoclaw onboard
+
+> Enter your NVIDIA API key: nvapi-xxxxxxxxxxxx
+  (Get a free key at: https://build.nvidia.com → any model → "Get API Key")
+
+> Sandbox name: my-assistant
+
+> Inference provider: NVIDIA Cloud (default)
+  Model: nvidia/nemotron-3-super-120b-a12b
+
+> WhatsApp channel: yes
+```
+
+When complete, you'll see:
+
+```
+──────────────────────────────────────────────────────────
+Sandbox      my-assistant (Landlock + seccomp + netns)
+Model        nvidia/nemotron-3-super-120b-a12b (NVIDIA Cloud API)
+──────────────────────────────────────────────────────────
+Run:         nemoclaw my-assistant connect
+Status:      nemoclaw my-assistant status
+Logs:        nemoclaw my-assistant logs --follow
+──────────────────────────────────────────────────────────
+```
+
+---
+
+## Step 6: Connect WhatsApp to OpenClaw (Inside Sandbox)
+
+```bash
+# Connect to the sandbox shell
+nemoclaw my-assistant connect
+
+# Inside the sandbox:
+sandbox@my-assistant:~$ openclaw channels login whatsapp
+# Scan the QR code with your phone
+# WhatsApp → Settings → Linked Devices → Link a Device
+
+# Verify connection
+sandbox@my-assistant:~$ openclaw status
+# Expected: Connected | WhatsApp: linked | Model: nvidia/nemotron-3-super-120b-a12b
+
+# Start the OpenClaw agent
+sandbox@my-assistant:~$ openclaw start
+```
+
+---
+
+## Step 7: Verify NemoClaw Sandbox Security
+
+The sandbox enforces four protection layers automatically. Verify each:
+
+```bash
+# On the OpenClaw VM host (not inside sandbox):
+
+# 1. Check sandbox status
+nemoclaw my-assistant status
+
+# 2. View active network policy (what egress is allowed)
+openshell sandbox list
+openshell term   # Opens TUI showing live network requests
+
+# 3. Test that sandbox cannot reach arbitrary hosts
+nemoclaw my-assistant connect
+sandbox@my-assistant:~$ curl https://google.com
+# Expected: blocked by network policy — you'll see it surface in openshell term
+
+# 4. Verify inference IS routed correctly
+sandbox@my-assistant:~$ openclaw agent --agent main --local \
+  -m "Say hello in one sentence." --session-id test
+# Expected: response from nemotron-3-super-120b-a12b
+```
+
+---
+
+## Step 8: Create Agent Swarm VM
+
+Same as original plan — this VM is not affected by NemoClaw:
+
+```
+VM ID:    101
+Name:     agent-swarm
+
+Disk:     500GB VirtIO SCSI
+CPU:      8–10 cores (type: host)
+RAM:      64GB (or more if using 128GB+ host)
+Network:  vmbr1 (ISOLATED — VLAN 20)
+```
+
+Set static IP `192.168.20.10/24`, install Docker, Claude Code, Codex, OpenHands as per
+original Part 7, Step 7.
+
+---
+
+## Step 9: Phase 2 — Switch Inference to Local Ollama (When Mac Studio Arrives)
+
+When the Mac Studio is on the network at `192.168.1.10:11434`, switching inference
+in NemoClaw is a single operation:
+
+```bash
+# On the OpenClaw VM:
+nemoclaw my-assistant connect
+
+# Re-run onboard to change inference provider
+nemoclaw onboard
+
+# Or edit inference config directly:
+# Select: Local Ollama
+# Host: http://192.168.1.10:11434
+# Model: nemotron:120b  (once Ollama has the model)
+#   — or any other model you've pulled on the Mac Studio
+
+# Restart to apply
+nemoclaw my-assistant stop
+nemoclaw my-assistant start
+```
+
+NemoClaw's OpenShell will reroute all inference calls to the Mac Studio
+instead of NVIDIA cloud. **No other config changes needed** — WhatsApp,
+sandbox security, and agent setup all stay the same.
+
+---
+
+## NemoClaw Key Commands Reference
+
+### On the Proxmox VM host:
+
+| Command | What it does |
+|---------|-------------|
+| `nemoclaw onboard` | Re-run setup wizard (change model, key, etc.) |
+| `nemoclaw my-assistant connect` | Open shell inside the sandbox |
+| `nemoclaw my-assistant status` | Show sandbox health + inference config |
+| `nemoclaw my-assistant logs -f` | Stream live sandbox logs |
+| `nemoclaw my-assistant stop` | Stop the sandbox |
+| `nemoclaw my-assistant start` | Start the sandbox |
+| `openshell term` | OpenShell TUI — approve/deny network requests |
+| `openshell sandbox list` | List all sandboxes + status |
+
+### Inside the sandbox (after `nemoclaw my-assistant connect`):
+
+| Command | What it does |
+|---------|-------------|
+| `openclaw status` | Check OpenClaw + WhatsApp connection |
+| `openclaw start` | Start the OpenClaw agent |
+| `openclaw tui` | Interactive chat interface |
+| `openclaw channels login whatsapp` | Re-link WhatsApp |
+| `openclaw nemoclaw status` | Show NemoClaw plugin status |
+
+---
+
+## NemoClaw Security Layers Summary
+
+NemoClaw adds four security layers on top of plain OpenClaw:
+
+| Layer | What it prevents | Configuration |
+|-------|-----------------|--------------|
+| **Network** | Agent calling arbitrary hosts (data exfiltration, prompt injection via URLs) | Hot-reloadable; approve/deny in `openshell term` |
+| **Filesystem** | Reads/writes outside `/sandbox` and `/tmp` | Locked at sandbox creation |
+| **Process** | Privilege escalation, dangerous syscalls | Locked at sandbox creation |
+| **Inference** | Model API calls going to uncontrolled backends | Hot-reloadable; rerouted through OpenShell gateway |
+
+When the agent tries to reach an unlisted host, OpenShell blocks the request
+and surfaces it in the TUI for your approval. You can pre-approve trusted domains
+(GitHub, npm registry, etc.) in the network policy config.
+
+---
+
+## Troubleshooting
+
+### NemoClaw not found after install
+```bash
+source ~/.bashrc  # or open a new terminal
+which nemoclaw    # should return a path
+```
+
+### OpenShell / k3s fails to start
+```bash
+# Check k3s status
+sudo systemctl status k3s
+sudo journalctl -u k3s -n 50
+
+# Ensure Docker is running
+sudo systemctl status docker
+```
+
+### Inference not working (NVIDIA cloud)
+```bash
+# Verify API key is valid
+curl -H "Authorization: Bearer $NVIDIA_API_KEY" \
+  https://integrate.api.nvidia.com/v1/models | python3 -m json.tool | head -20
+
+# Re-run onboard to re-enter key
+nemoclaw onboard
+```
+
+### Sandbox OOM (out of memory)
+Increase the OpenClaw VM RAM in Proxmox to 16–24GB.
+The sandbox image + k3s + OpenShell gateway + OpenClaw can use 8–12GB under load.
+
 
 ---
 
