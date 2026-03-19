@@ -866,31 +866,145 @@ action:
 
 ## 4.8 Remote Access
 
-### Tailscale: Access Ollama from Phone
+Everything in this setup uses **outbound-only connections**. Your Google Nest never needs
+a port forwarded. From the internet's perspective, your home is a black box.
+
+### Services & How They're Reached Remotely
+
+| Service | Method | Router config |
+|---------|--------|--------------|
+| WhatsApp AI (OpenClaw) | OpenClaw cloud relay — outbound WebSocket | None |
+| Home Assistant | Nabu Casa — outbound tunnel | None |
+| Ollama (local LLM) | Tailscale VPN — outbound WireGuard | None |
+| Jellyfin (media) | Tailscale or Jellyfin Connect | None |
+
+---
+
+### Tailscale: Access Your Local LLM from Anywhere
+
+Tailscale creates an encrypted WireGuard tunnel between your devices.
+Your phone can reach Ollama on your home machine as if it were sitting next to it —
+over cellular, at a coffee shop, anywhere.
+
+**Step 1: Create a Tailscale account**
+
+Go to [tailscale.com](https://tailscale.com) and sign up. Free for personal use (up to 3 users, 100 devices).
+
+**Step 2: Install Tailscale on the MS-S1 MAX**
 
 ```bash
-# On Proxmox host
+# On Proxmox host (ssh root@192.168.1.20)
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
+# Follow the auth URL printed in the terminal — opens browser to approve the device
 ```
 
-Install Tailscale on phone → sign in with same account.
+Verify it connected:
+```bash
+tailscale ip -4
+# Returns something like: 100.64.0.1
+# This is your machine's Tailscale IP — note it down
+```
 
-Your phone now reaches Ollama at `http://100.x.x.x:11434` (Tailscale IP) from anywhere.
+**Step 3: Install Tailscale on your phone**
 
-**Enchanted app (iOS):** Settings → Server URL → `http://100.x.x.x:11434`
-**Open WebUI:** Deploy on Media Server VM and access via Tailscale IP.
+- **iPhone:** App Store → Tailscale → Install → Sign in with same account
+- **Android:** Play Store → Tailscale → Install → Sign in with same account
 
-### No Port Forwarding Needed
+Both devices will appear in your Tailscale admin console at [login.tailscale.com](https://login.tailscale.com).
 
-| Service | Remote Access Method | Router Config Needed |
-|---------|---------------------|---------------------|
-| WhatsApp AI | OpenClaw cloud relay (outbound WS) | None |
-| Home Assistant | Nabu Casa (outbound) | None |
-| Ollama from phone | Tailscale VPN (outbound) | None |
-| Jellyfin | Tailscale or Jellyfin Connect | None |
+**Step 4: Test the connection**
 
-Your router never needs an inbound port opened.
+With Tailscale active on your phone (on cellular, not home WiFi):
+
+```
+Open browser on phone → http://100.64.0.1:11434/api/tags
+Should return JSON list of your Ollama models
+```
+
+If you see the model list, your phone can reach your local LLM from anywhere.
+
+---
+
+### Chat with Your Local LLM from iPhone
+
+**Enchanted (recommended — native iOS app)**
+
+1. Install [Enchanted](https://apps.apple.com/app/enchanted-llm/id6474268307) from App Store
+2. Open Enchanted → Settings → Server URL
+3. Enter: `http://100.64.0.1:11434` (your Tailscale IP)
+4. Tap Connect → select a model → start chatting
+
+Enchanted gives you a ChatGPT-style interface talking directly to your home Ollama.
+100% private. No data leaves your home network.
+
+**Open WebUI (browser-based — works on iPhone and Android)**
+
+Deploy on your Media Server VM:
+
+```bash
+ssh ubuntu@192.168.1.22
+docker run -d   -p 8080:8080   -e OLLAMA_BASE_URL=http://192.168.1.20:11434   --name open-webui   --restart unless-stopped   ghcr.io/open-webui/open-webui:main
+```
+
+Access via Tailscale from any browser: `http://100.64.0.1:8080`
+Works on iPhone, Android, laptop — no app install required.
+
+---
+
+### Chat with Your Local LLM from Android
+
+**Open WebUI (browser — recommended)**
+Same as above. Open `http://100.64.0.1:8080` in Chrome on cellular.
+
+**Ollama Android apps:**
+Search "Ollama" on Play Store — several apps support custom server URLs.
+Set server to `http://100.64.0.1:11434`.
+
+---
+
+### Lock Down Tailscale Access (Optional but Recommended)
+
+By default, any device on your Tailscale network can reach Ollama.
+Use ACLs to restrict access to just your phone:
+
+In Tailscale admin console → **Access Controls**:
+
+```json
+{
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:phone"],
+      "dst": ["tag:homeserver:11434"]
+    }
+  ],
+  "tagOwners": {
+    "tag:phone": ["autogroup:admin"],
+    "tag:homeserver": ["autogroup:admin"]
+  }
+}
+```
+
+Tag your devices in the Tailscale admin console:
+- MS-S1 MAX → `tag:homeserver`
+- Your phone → `tag:phone`
+
+Now only your tagged phone can reach port 11434, even if other devices join your Tailscale network.
+
+---
+
+### Phase 2: Tailscale on Mac Studio
+
+When the Mac Studio is added, install Tailscale there too:
+
+```bash
+brew install --cask tailscale
+# Open Tailscale menu bar → Log in with same account
+```
+
+Point Enchanted or Open WebUI at the Mac Studio's Tailscale IP for access to 70B+ models
+from your phone — still fully private, still no port forwarding.
 
 ---
 
