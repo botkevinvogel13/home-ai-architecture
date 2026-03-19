@@ -9,6 +9,7 @@
 ## Table of Contents
 
 - [Part 1: What Is This And Why Does It Matter](#part-1-what-is-this-and-why-does-it-matter)
+- [Phase Overview: Phase 1 vs Phase 2](#phase-overview-what-youre-building-and-when)
 - [Part 2: System Architecture Overview](#part-2-system-architecture-overview)
 - [Part 3: Bill of Materials](#part-3-bill-of-materials)
 - [Part 4: Network Design](#part-4-network-design)
@@ -100,6 +101,116 @@ Every piece of AI processing in this system happens on hardware sitting in your 
 The cloud components (WhatsApp, OpenClaw gateway) are **dumb pipes** — they move bytes, not meaning. The intelligence lives at home.
 
 ---
+
+---
+
+# Phase Overview: What You're Building and When
+
+This architecture is designed in two phases. **Phase 1 is complete and functional on day one.**
+Phase 2 is an optional hardware upgrade that improves inference performance.
+Nothing in Phase 1 breaks when you add Phase 2 — it's purely additive.
+
+---
+
+## Phase 1 — Everything on the MS-S1 MAX
+
+**Hardware required:** Minisforum MS-S1 MAX + Raspberry Pi 4 (already owned)
+
+**Inference:**
+- **Orchestration agent (NemoClaw):** Routes to NVIDIA cloud — `nvidia/nemotron-3-super-120b-a12b` — **free**
+- **Coding/worker agents:** Local Ollama on the AMD Radeon 890M (Qwen 2.5 Coder 32B)
+- **Home Assistant:** Local Ollama (Qwen 2.5 7B or phi3:mini)
+
+**Performance:**
+
+| Task | Model | Tokens/sec | Notes |
+|------|-------|-----------|-------|
+| Chat / orchestration | Nemotron 120B (cloud) | ~50–80 tok/s | Free, fast, rate-limited |
+| Coding agent (local) | Qwen 2.5 Coder 32B | ~15–25 tok/s | Good quality, fits on Radeon 890M |
+| HA automations | Qwen 2.5 7B (local) | ~50–70 tok/s | Fast enough for real-time |
+| Fallback (no internet) | Qwen 2.5 Coder 32B | ~15–25 tok/s | Full offline capability |
+
+**Coding & agentic quality:**
+- Single coding agent works well. Qwen 2.5 Coder 32B is genuinely excellent for most tasks.
+- Multi-agent parallelism is limited — the Radeon 890M serves one model request at a time efficiently.
+  Running 3–4 simultaneous agents causes queuing and slowdown.
+- Complex multi-file refactoring, architecture decisions, and long-context reasoning are where
+  the 32B model starts to show limits vs. a 70B+.
+- Cloud Nemotron 120B handles orchestration well, but rate limits can throttle heavy agentic workflows.
+
+**Cost:** ~$2,920 (MS-S1 MAX, already purchased). No ongoing cost beyond electricity.
+
+---
+
+## Phase 2 — Mac Studio M5 Ultra Added
+
+**Additional hardware required:** Apple Mac Studio M5 Ultra (256GB unified memory) — ~$4,000–5,000
+
+**What changes:** One config line per VM. `OLLAMA_HOST` points from `localhost` to `192.168.1.10`.
+Everything else — Proxmox, NemoClaw, agent setup, WhatsApp — stays identical.
+
+**Inference:**
+- **All agents:** Local Ollama on Mac Studio — 70B, 120B, and 200B+ models
+- **NVIDIA cloud:** Still available as fallback or for specific models
+- **Home Assistant:** Same local models, now served by Mac Studio
+
+**Performance:**
+
+| Task | Model | Tokens/sec | Notes |
+|------|-------|-----------|-------|
+| Chat / orchestration | Nemotron 120B (local) | ~35–50 tok/s | Private, no rate limits |
+| Chat / orchestration | Llama 3.1 70B (local) | ~55–75 tok/s | Fast, high quality |
+| Coding agent | Qwen 2.5 Coder 32B | ~90–120 tok/s | 4–6× faster than Phase 1 |
+| Coding agent | Qwen 2.5 Coder 72B | ~45–65 tok/s | Noticeably smarter |
+| Deep reasoning | DeepSeek-R1 70B | ~40–60 tok/s | Complex architecture decisions |
+| HA automations | Qwen 2.5 7B | ~200+ tok/s | Near-instant |
+| Parallel agents (×4) | Qwen 2.5 Coder 32B | ~90–120 tok/s each | No queuing — M5 Ultra handles concurrency |
+
+**Coding & agentic quality (incremental gains over Phase 1):**
+
+| Capability | Phase 1 | Phase 2 | Improvement |
+|-----------|---------|---------|-------------|
+| Single agent speed | 15–25 tok/s | 90–120 tok/s | **4–6× faster** |
+| Parallel agents | 1–2 before slowdown | 4–8 simultaneous | **Swarm-scale** |
+| Max model size | 32B practical | 70B–200B | **Qualitative leap** |
+| Long context (200K+) | Unreliable at 32B | Solid at 70B+ | **Complex codebases** |
+| Multi-file refactoring | Adequate | Excellent | **Architecture-level reasoning** |
+| Privacy | Cloud for main agent | Fully local | **100% on-premises** |
+| Rate limits | Cloud-throttled | None | **Unlimited throughput** |
+
+**Where you'll actually feel it:**
+1. **Coding agents running in parallel** — the single biggest unlock. Phase 1 queues requests;
+   Phase 2 runs 4–8 agents simultaneously without degradation.
+2. **Larger models** — jumping from 32B to 70B is a genuine quality jump for complex reasoning,
+   not just a benchmark number.
+3. **No rate limits** — heavy agentic workflows (dozens of LLM calls per task) hit NVIDIA
+   free-tier limits in Phase 1. Phase 2 is unlimited.
+4. **Full privacy** — nothing leaves your home network.
+
+**What Phase 2 does NOT improve:**
+- WhatsApp responsiveness (already fast in Phase 1 via cloud)
+- Home Assistant automations (already fast enough with 7B)
+- NemoClaw sandbox security (unchanged)
+- Stability or uptime (already solid)
+
+**Incremental cost of Phase 2:**
+
+| Item | Cost |
+|------|------|
+| Mac Studio M5 Ultra 256GB | ~$4,000–5,000 |
+| Ethernet cable (direct to router) | ~$10 |
+| Config change (time) | ~10 minutes |
+| **Total** | **~$4,010–5,010** |
+
+**Is Phase 2 worth it?**
+
+If you are running multiple coding agents simultaneously on real projects, yes — the experience
+difference is significant. If you are primarily using this as a personal assistant with occasional
+single-agent coding tasks, Phase 1 is genuinely excellent and Phase 2 is a luxury.
+Wait until you've lived in Phase 1 for a few months before deciding.
+
+---
+
 
 # Part 2: System Architecture Overview
 
@@ -293,9 +404,10 @@ You (phone) — full local model response, private
 
 | Tier | Config | Est. Total |
 |------|--------|-----------|
-| **Minimum Viable** | M4 Ultra Mac Studio + MS-S1 MAX + Pi 4 | ~$7,200 |
-| **Recommended** | M5 Ultra Mac Studio + MS-S1 MAX + Pi 4 + Coral | ~$8,100 |
-| **Full Power** | M5 Ultra + MS-S1 MAX + Pi 4 + Coral + UniFi | ~$8,300 |
+| **Phase 1 (today)** | MS-S1 MAX + Pi 4 | ~$2,975 |
+| **Phase 1 + Camera AI** | MS-S1 MAX + Pi 4 + Coral | ~$3,050 |
+| **Phase 2 (upgrade)** | + M4 Ultra Mac Studio (192GB) | ~$7,250 |
+| **Phase 2 Full** | + M5 Ultra Mac Studio (256GB) + Coral | ~$8,100 |
 
 ---
 
