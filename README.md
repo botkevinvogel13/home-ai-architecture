@@ -110,7 +110,7 @@ The cloud components (WhatsApp, OpenClaw gateway) are **dumb pipes** — they mo
 ║                           HOME NETWORK (192.168.1.0/24)                         ║
 ║                                                                                  ║
 ║  ┌─────────────────────────────┐     ┌─────────────────────────────────────┐    ║
-║  │     MAC STUDIO M5 ULTRA     │     │        PROXMOX HOST (MS-01)         │    ║
+║  │     MAC STUDIO M5 ULTRA     │     │        PROXMOX HOST (MS-S1 MAX)         │    ║
 ║  │     192.168.1.10            │     │        192.168.1.20                 │    ║
 ║  │                             │     │                                     │    ║
 ║  │  ┌───────────────────────┐  │     │  ┌─────────────────────────────┐   │    ║
@@ -265,8 +265,8 @@ You (phone) — full local model response, private
 |-----------|----------|-------------|------|---------|
 | **LLM Inference Server** | Mac Studio M5 Ultra | macOS + Ollama | Runs all AI models; serves inference to everything on LAN | VLAN 1 · 192.168.1.10 |
 | **Home Automation Hub** | Raspberry Pi 4 (4GB) | Home Assistant OS | Smart home control, Frigate camera AI, HA automations | VLAN 30 · 192.168.30.10 |
-| **AI Orchestrator** | Proxmox VM1 | Ubuntu 22.04 + OpenClaw | Personal AI assistant, WhatsApp gateway, task orchestration | VLAN 1 · 192.168.1.21 |
-| **Agent Swarm** | Proxmox VM2 | Ubuntu 22.04 + Docker | Autonomous coding agents (Claude Code, Codex, OpenHands) | VLAN 20 · 192.168.20.10 |
+| **AI Orchestrator** | Proxmox VM1 (MS-S1 MAX) | Ubuntu 22.04 + NemoClaw | Personal AI assistant, WhatsApp gateway, NemoClaw sandbox, task orchestration | VLAN 1 · 192.168.1.21 |
+| **Agent Swarm** | Proxmox VM2 (MS-S1 MAX) | Ubuntu 22.04 + Docker | Autonomous coding agents (Claude Code, Codex, OpenHands) | VLAN 20 · 192.168.20.10 |
 | **Remote Access (HA)** | Cloud | Nabu Casa | Encrypted cloud relay for HA mobile app | Internet |
 | **Remote Access (LLM)** | Cloud | Tailscale | WireGuard VPN for phone → Mac Studio | Internet |
 | **Remote Access (AI)** | Cloud | OpenClaw Gateway | WebSocket relay for WhatsApp → OpenClaw | Internet |
@@ -280,7 +280,7 @@ You (phone) — full local model response, private
 | Item | Model | Est. Price | Notes |
 |------|-------|-----------|-------|
 | **LLM Server** | Apple Mac Studio M5 Ultra (256GB unified memory) | ~$4,000–5,000 | Not yet released as of early 2026; pre-order/watch Apple.com. M4 Ultra (192GB) available now as alternative (~$4,199). |
-| **Proxmox Host** | Minisforum MS-01 (Intel i9-12900H, 64GB DDR5, 1TB NVMe) | ~$500–600 | [minisforum.com](https://minisforum.com/). Upgrade to 128GB RAM ($150) for larger swarms. |
+| **Proxmox Host** | Minisforum MS-S1 MAX (AMD Ryzen AI Max+ 395, 128GB unified LPDDR5X, 2TB NVMe) | ~$2,920 | [minisforum.com](https://minisforum.com/product/ms-s1-max/) or [Newegg](https://www.newegg.com/minisforum-barebone-systems-mini-pc-deskmini/p/2SW-002G-000W4). 128GB unified memory, AMD Radeon 890M GPU (40 CUs) for local AI inference. |
 | **Home Automation Hub** | Raspberry Pi 4 Model B (4GB RAM) | ~$55–75 | [raspberrypi.com](https://www.raspberrypi.com/). Include official USB-C power supply. |
 | **AI Accelerator (Camera)** | Google Coral USB Accelerator | ~$60–80 | [coral.ai](https://coral.ai/products/accelerator). Used by Frigate for real-time object detection. |
 | **Storage (Pi)** | Samsung Endurance microSD 64GB (or 128GB) | ~$15–20 | Or use USB SSD for better reliability. |
@@ -293,9 +293,9 @@ You (phone) — full local model response, private
 
 | Tier | Config | Est. Total |
 |------|--------|-----------|
-| **Minimum Viable** | M4 Ultra Mac Studio + 64GB Proxmox + Pi 4 | ~$4,800 |
-| **Recommended** | M5 Ultra Mac Studio + 64GB Proxmox + Pi 4 + Coral | ~$5,700 |
-| **Full Power** | M5 Ultra + 128GB Proxmox + Pi 4 + Coral + UniFi | ~$6,100 |
+| **Minimum Viable** | M4 Ultra Mac Studio + MS-S1 MAX + Pi 4 | ~$7,200 |
+| **Recommended** | M5 Ultra Mac Studio + MS-S1 MAX + Pi 4 + Coral | ~$8,100 |
+| **Full Power** | M5 Ultra + MS-S1 MAX + Pi 4 + Coral + UniFi | ~$8,300 |
 
 ---
 
@@ -944,28 +944,32 @@ In Phase 2, when the Mac Studio arrives, you swap one config line to point at lo
 
 ---
 
-### Recommended: Minisforum MS-01 i9-12900H (128GB DIY)
+### Selected Hardware: Minisforum MS-S1 MAX
 
-The MS-01 is the machine specified in this architecture. It supports **2x SO-DIMM DDR5 slots**,
-each upgradeable to 64GB, for a 128GB total. Minisforum sells it pre-configured with 32GB;
-you upgrade the RAM yourself.
+The MS-S1 MAX is the machine used in this architecture. It ships **ready to run** with 128GB
+unified LPDDR5X memory and an AMD Radeon 890M integrated GPU — no RAM upgrade required.
 
 | Spec | Value |
 |------|-------|
-| CPU | Intel Core i9-12900H (14 cores, 20 threads, up to 5.0GHz) |
-| RAM | 2x SO-DIMM DDR5 slots → **self-upgrade to 128GB** |
-| Storage | 2x M.2 NVMe PCIe 4.0 slots |
-| Network | **2x 2.5GbE + 2x 10GbE SFP+** |
-| Size | 197 × 172 × 55mm |
-| Price | ~$768 (32GB/1TB config) + ~$160 (2x64GB DDR5 SO-DIMM) = **~$930** |
-| Link | [minisforum.com/product/ms-01](https://www.minisforum.com/product/ms-01/) |
+| CPU | AMD Ryzen AI Max+ 395 (16 cores, 32 threads, up to 5.1GHz) |
+| RAM | **128GB unified LPDDR5X** (shared CPU + GPU, not upgradeable) |
+| GPU | AMD Radeon 890M (40 CUs) — shares all 128GB as VRAM |
+| Storage | 2TB M.2 NVMe PCIe 4.0 |
+| Network | 2x 2.5GbE + 2x USB4 (40Gbps) |
+| Size | Small form factor mini PC |
+| Price | **$2,919.90** (Minisforum direct) / **$2,957** (Newegg) |
+| Link | [Newegg](https://www.newegg.com/minisforum-barebone-systems-mini-pc-deskmini/p/2SW-002G-000W4) |
 
-**DIY RAM upgrade:**
-Buy 2x 64GB DDR5-4800 SO-DIMM (Crucial or Kingston). The MS-01 takes standard laptop DDR5.
-Total with RAM: ~$900–950.
+> **Ships with Windows.** Before wiping: boot Windows once, apply any firmware/BIOS updates
+> from Minisforum's support page for the MS-S1 MAX, then install Proxmox VE.
 
-> **Barebone option:** Buy the i9-12900H Barebone ($479.90) + your own 2x64GB DDR5 + 1-2TB NVMe
-> for even lower cost (~$700–750 total).
+**Key advantage over original MS-01 plan:** The AMD Radeon 890M with 40 CUs sharing all 128GB
+means you can run local Ollama inference (13B–34B quantized models) directly on this machine
+via ROCm — **without the Mac Studio** if needed. The Mac Studio remains the recommended
+inference server for larger models, but the MS-S1 MAX can bridge the gap.
+
+> **Memory ceiling:** 128GB is the hard limit — unified LPDDR5X is soldered to the chip package.
+> Plan your VM allocation accordingly (see Step 4).
 
 ---
 
@@ -985,34 +989,17 @@ If you want to skip the DIY RAM upgrade and get a newer machine that's ready to 
 The 285HX is a significantly newer/faster chip than the 12900H. 192GB ECC gives you room
 to run much larger agent swarms. This is the "buy once, don't upgrade for 5 years" option.
 
----
 
-### Alternative: Minisforum MS-S1 MAX (128GB, AMD + Integrated GPU)
-
-| Spec | Value |
-|------|-------|
-| CPU | AMD Ryzen AI Max+ 395 (16 cores) |
-| RAM | **128GB unified memory** (shared CPU + GPU) |
-| GPU | AMD Radeon 890M (40 CUs) — can run local AI inference |
-| Storage | 2TB NVMe |
-| Price | **$2,919.90** |
-| Link | [minisforum.com/product/ms-s1-max](https://www.minisforum.com/product/ms-s1-max/) |
-
-Unique advantage: the integrated Radeon 890M shares all 128GB as VRAM.
-You could run ~7B–13B parameter models locally on this machine via Ollama **without** the Mac Studio,
-making it a potential standalone AI inference machine as well as a Proxmox host.
-Phase 2 upgrade (Mac Studio) becomes optional if this fits your budget now.
 
 ---
 
 ### Decision Guide
 
-| Budget | Choice | RAM | Ready to run? |
-|--------|--------|-----|--------------|
-| ~$930 | MS-01 i9-12900H + DIY 128GB DDR5 | 128GB | Needs RAM swap |
-| ~$1,500 | MS-01 i9-12900H Barebone + DIY RAM + 2nd NVMe | 128GB | Some assembly |
-| ~$2,920 | MS-S1 MAX | 128GB + integrated GPU | ✅ Yes |
-| ~$3,000 | MS-02 Ultra 192GB ECC | 192GB ECC | ✅ Yes |
+| Choice | RAM | GPU | Ready to run? | Price |
+|--------|-----|-----|--------------|-------|
+| **MS-S1 MAX** ✅ Selected | 128GB unified | Radeon 890M (local inference) | ✅ Yes | ~$2,920 |
+| MS-02 Ultra 192GB ECC | 192GB ECC SO-DIMM | None | ✅ Yes (Minisforum direct) | ~$3,000 |
+| MS-01 i9-12900H + DIY 128GB | 128GB SO-DIMM | None | Needs RAM swap | ~$930 |
 
 ---
 
@@ -1027,7 +1014,7 @@ sudo dd if=proxmox-ve_8.x.iso of=/dev/sdX bs=4M status=progress
 
 ### Installation
 
-1. Boot from USB (DEL or F7 during POST for boot menu on MS-01/MS-02)
+1. Boot from USB (hold **F7** or **DEL** during POST for boot menu on MS-S1 MAX)
 2. Select **Install Proxmox VE (Graphical)**
 3. Accept EULA
 4. **Target disk:** Primary NVMe
@@ -1811,7 +1798,7 @@ docker compose scale openhands=3  # Run 3 parallel OpenHands instances
 
 ### When 64GB RAM Isn't Enough
 
-1. Upgrade Proxmox host to 128GB RAM (~$150 for 2x64GB DDR5 kit)
+1. The MS-S1 MAX has 128GB unified memory (not upgradeable). To scale beyond this, add a second Proxmox node.
 2. Increase Agent Swarm VM memory allocation in Proxmox
 3. Alternatively, add a second Proxmox machine and use Proxmox Cluster
 
