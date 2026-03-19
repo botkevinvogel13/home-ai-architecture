@@ -358,7 +358,7 @@ Three VMs run on the MS-S1 MAX. Resource allocation from 128GB total:
 |----|------|-----|------|---------|---------|
 | NemoClaw VM | 4 | 16GB | 80GB | vmbr0 (LAN) | OpenClaw + NemoClaw sandbox |
 | Agent Swarm VM | 8 | 32GB | 200GB | vmbr1 (internal only) | Coding agents |
-| Media Server VM | 4 | 8GB | 100GB | vmbr0 (LAN) | Plex/Jellyfin |
+| Media Server VM | 4 | 4GB | 100GB | vmbr0 (LAN) | Plex/Jellyfin |
 | **Proxmox host** | — | ~8GB | — | — | OS overhead + Ollama |
 | **Available for Ollama** | 4 | ~64GB | — | — | Model inference |
 
