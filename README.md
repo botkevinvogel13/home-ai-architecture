@@ -535,15 +535,68 @@ nemoclaw my-assistant connect      # Shell into sandbox
 
 ## 4.4 Ollama + Local Models
 
-Ollama runs on the **Proxmox host** (not a VM) for direct GPU access.
+> **Architecture note (credit: Gemini review):** Running Ollama directly on the Proxmox host
+> is an anti-pattern. If Ollama crashes due to a memory leak or a bad model, it can freeze
+> the entire hypervisor — taking down your HA, media server, and NemoClaw VMs with it.
+>
+> **The fix:** Run Ollama inside a **Proxmox LXC container** with the GPU device bind-mounted
+> in. Ollama gets native Radeon 890M access, but a crash stays contained to the LXC — 
+> Proxmox and your other VMs are unaffected.
+
+### Step 1: Create the Ollama LXC Container
+
+In Proxmox UI: **Create CT** (Container, not VM)
+
+```
+CT ID:      200
+Hostname:   ollama
+Template:   Ubuntu 22.04 (download from Proxmox template list)
+Disk:       32GB
+CPU:        4 cores
+RAM:        8192 MB  (Ollama process overhead — models live in unified memory pool)
+Network:    vmbr0, IP 192.168.1.25/24, Gateway 192.168.1.1
+Unprivileged: YES
+```
+
+### Step 2: Bind-Mount the GPU into the LXC
+
+After creating the container (do NOT start it yet):
 
 ```bash
-# On Proxmox host (ssh root@192.168.1.20)
+# On Proxmox host — edit the LXC config
+nano /etc/pve/lxc/200.conf
+```
+
+Add these lines to the config file:
+
+```
+# GPU device access for Ollama
+lxc.cgroup2.devices.allow: c 226:0 rwm
+lxc.cgroup2.devices.allow: c 226:128 rwm
+lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+lxc.mount.entry: /dev/dri/card0 dev/dri/card0 none bind,optional,create=file
+lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
+```
+
+```bash
+# Start the container
+pct start 200
+pct enter 200
+```
+
+### Step 3: Install Ollama Inside the LXC
+
+```bash
+# Inside the LXC (pct enter 200)
 
 # Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Bind to all interfaces so VMs and LAN devices can reach it
+# Verify GPU is visible
+ls /dev/dri/
+# Should show: card0  renderD128
+
+# Configure Ollama to serve on LAN
 mkdir -p /etc/systemd/system/ollama.service.d
 cat > /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
 [Service]
@@ -552,10 +605,14 @@ EOF
 
 systemctl daemon-reload
 systemctl enable ollama
-systemctl restart ollama
+systemctl start ollama
+
+# Verify GPU is being used
+ollama run phi3:mini "hello" --verbose
+# Look for: "using GPU: AMD Radeon Graphics" in output
 ```
 
-### Pull Models
+### Step 4: Pull Models
 
 ```bash
 # Coding agents (primary worker model)
@@ -564,32 +621,77 @@ ollama pull qwen2.5-coder:32b
 # Home Assistant automations (fast, lightweight)
 ollama pull qwen2.5:7b
 
-# Very fast fallback for simple tasks
+# Fast fallback for simple tasks
 ollama pull phi3:mini
 
-# Verify
 ollama list
 ```
 
-### Model Allocation by Use Case
+### Step 5: Model Priority Scheduling
 
-| Model | Use | RAM needed | Speed (Radeon 890M) |
-|-------|-----|-----------|---------------------|
-| `qwen2.5-coder:32b` | Coding agents | ~20GB | ~15–25 tok/s |
-| `qwen2.5:7b` | Home Assistant | ~5GB | ~50–70 tok/s |
-| `phi3:mini` | Fast responses | ~2GB | ~100+ tok/s |
-
-Total model footprint: ~27GB of the 128GB unified memory pool.
-
-### Restrict LAN Access to Ollama
-
-Ollama has no auth. Restrict with iptables so only your devices can reach port 11434:
+> **Architecture note (credit: Gemini review):** All models share the 270 GB/s memory
+> bandwidth. If Home Assistant triggers an automation while coding agents are running,
+> the HA model can get starved — causing smart home commands to lag.
+>
+> **The fix:** Run two separate Ollama instances on different ports — one dedicated to HA
+> (high priority, always responsive), one for agents (background work).
 
 ```bash
-# On Proxmox host — allow LAN + VMs, block everything else
-iptables -A INPUT -s 192.168.1.0/24 -p tcp --dport 11434 -j ACCEPT
-iptables -A INPUT -s 192.168.20.0/24 -p tcp --dport 11434 -j ACCEPT
-iptables -A INPUT -p tcp --dport 11434 -j DROP
+# Inside the Ollama LXC — create a second Ollama instance for Home Assistant
+
+# HA-dedicated instance (port 11435, high priority)
+cat > /etc/systemd/system/ollama-ha.service << 'EOF'
+[Unit]
+Description=Ollama HA Instance
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+Environment="OLLAMA_HOST=0.0.0.0:11435"
+Environment="OLLAMA_MAX_LOADED_MODELS=1"
+Environment="OLLAMA_NUM_PARALLEL=1"
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable ollama-ha
+systemctl start ollama-ha
+
+# Pull HA model into this instance
+OLLAMA_HOST=localhost:11435 ollama pull qwen2.5:7b
+OLLAMA_HOST=localhost:11435 ollama pull phi3:mini
+```
+
+Update Home Assistant to use port 11435:
+```
+Settings → Devices & Services → Ollama → Configure
+Host: http://192.168.1.25:11435   ← dedicated HA port
+```
+
+Coding agents continue to use port 11434 (main Ollama instance).
+HA commands now always get a dedicated inference slot — zero contention.
+
+### Model Allocation by Use Case
+
+| Model | Instance | Port | RAM | Speed (Radeon 890M) |
+|-------|----------|------|-----|---------------------|
+| `qwen2.5-coder:32b` | Agents | 11434 | ~20GB | ~15–25 tok/s |
+| `phi3:mini` | Agents | 11434 | ~2GB | ~100+ tok/s |
+| `qwen2.5:7b` | HA dedicated | 11435 | ~5GB | ~50–70 tok/s |
+| `phi3:mini` | HA dedicated | 11435 | ~2GB | ~100+ tok/s |
+
+Total memory footprint: ~29GB of the 128GB unified pool.
+
+### Restrict LAN Access to Ollama LXC
+
+```bash
+# On Proxmox host — allow LAN to reach both Ollama ports, block everything else
+iptables -A FORWARD -s 192.168.1.0/24 -d 192.168.1.25 -p tcp --dport 11434 -j ACCEPT
+iptables -A FORWARD -s 192.168.1.0/24 -d 192.168.1.25 -p tcp --dport 11435 -j ACCEPT
+iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.25 -p tcp --dport 11434 -j ACCEPT
+iptables -A FORWARD -d 192.168.1.25 -p tcp -m multiport --dports 11434,11435 -j DROP
 netfilter-persistent save
 ```
 
@@ -641,7 +743,7 @@ sandbox$ nano ~/.openclaw/openclaw.json
         "api": "openai-completions"
       },
       "ollama": {
-        "baseUrl": "http://192.168.1.20:11434",
+        "baseUrl": "http://192.168.1.25:11434",
         "api": "ollama"
       }
     }
@@ -677,8 +779,8 @@ npm install -g @anthropic-ai/claude-code
 npm install -g @openai/codex
 
 # Point all agents at local Ollama
-echo 'OLLAMA_HOST=http://192.168.1.20:11434' | sudo tee -a /etc/environment
-echo 'OPENAI_BASE_URL=http://192.168.1.20:11434/v1' | sudo tee -a /etc/environment
+echo 'OLLAMA_HOST=http://192.168.1.25:11434' | sudo tee -a /etc/environment
+echo 'OPENAI_BASE_URL=http://192.168.1.25:11434/v1' | sudo tee -a /etc/environment
 echo 'OPENAI_API_KEY=ollama' | sudo tee -a /etc/environment
 source /etc/environment
 ```
@@ -696,7 +798,7 @@ services:
       - "3000:3000"
     environment:
       - LLM_API_KEY=ollama
-      - LLM_BASE_URL=http://192.168.1.20:11434
+      - LLM_BASE_URL=http://192.168.1.25:11434
       - LLM_MODEL=ollama/qwen2.5-coder:32b
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -824,7 +926,7 @@ cameras:
 
 ```
 Settings → Devices & Services → Add Integration → Search "Ollama"
-Host: http://192.168.1.20:11434
+Host: http://192.168.1.25:11434
 Model: qwen2.5:7b
 ```
 
@@ -944,7 +1046,7 @@ Deploy on your Media Server VM:
 
 ```bash
 ssh ubuntu@192.168.1.22
-docker run -d   -p 8080:8080   -e OLLAMA_BASE_URL=http://192.168.1.20:11434   --name open-webui   --restart unless-stopped   ghcr.io/open-webui/open-webui:main
+docker run -d   -p 8080:8080   -e OLLAMA_BASE_URL=http://192.168.1.25:11434   --name open-webui   --restart unless-stopped   ghcr.io/open-webui/open-webui:main
 ```
 
 Access via Tailscale from any browser: `http://100.64.0.1:8080`
@@ -1331,6 +1433,7 @@ Move Mac Studio to VLAN 20 subnet:
 | Device | Old IP | New IP | VLAN |
 |--------|--------|--------|------|
 | MS-S1 MAX | 192.168.1.20 | 192.168.1.20 | 1 (unchanged) |
+| Ollama LXC | 192.168.1.25 |
 | NemoClaw VM | 192.168.1.21 | 192.168.1.21 | 1 (unchanged) |
 | Media Server VM | 192.168.1.22 | 192.168.1.22 | 1 (unchanged) |
 | Raspberry Pi | 192.168.1.30 | 192.168.1.30 | 1 (unchanged) |
@@ -1499,11 +1602,11 @@ If you find yourself waiting on inference or wanting more parallel agents, that'
 
 ```bash
 # Ollama serving on LAN
-curl http://192.168.1.20:11434/api/tags
+curl http://192.168.1.25:11434/api/tags
 # Expected: JSON list of installed models
 
 # From Raspberry Pi — HA can reach Ollama
-curl http://192.168.1.20:11434/api/tags
+curl http://192.168.1.25:11434/api/tags
 # Expected: same JSON
 
 # Ollama NOT reachable from internet (test on cellular)
@@ -1516,7 +1619,7 @@ curl --connect-timeout 3 http://192.168.1.21:18789
 # Expected: timeout (blocked by iptables)
 
 # Agent Swarm CAN reach Ollama
-curl http://192.168.1.20:11434/api/tags
+curl http://192.168.1.25:11434/api/tags
 # Expected: model list
 
 # NemoClaw sandbox health
@@ -1612,7 +1715,8 @@ done
 > |--------|----|
 > | Google Nest Router | 192.168.1.1 |
 > | MS-S1 MAX (Proxmox host) | 192.168.1.20 |
-> | NemoClaw VM | 192.168.1.21 |
+> | Ollama LXC | 192.168.1.25 |
+| NemoClaw VM | 192.168.1.21 |
 > | Media Server VM | 192.168.1.22 |
 > | Agent Swarm VM | 192.168.20.10 (internal) |
 > | Raspberry Pi (HA) | 192.168.1.30 |
