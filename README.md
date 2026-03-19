@@ -1,7 +1,7 @@
 # Home AI Infrastructure Architecture
 ### A Private, Powerful, Always-On AI Stack — Built in Your Home
 
-> **Version:** 2.0 | **Status:** Active  
+> **Version:** 2.1 | **Status:** Active  
 > **Hardware:** Minisforum MS-S1 MAX · Raspberry Pi 4 · (Phase 2: Apple Mac Studio)
 
 ---
@@ -23,10 +23,6 @@
   - [4.9 Security](#49-security)
 - [Part 5: Phase 2 — Mac Studio Added](#part-5-phase-2--mac-studio-added)
 - [Phase 3: Network-Level Security Hardening](#part-55-phase-3--network-level-security-hardening)
-  - [5.1 What Changes](#51-what-changes)
-  - [5.2 Mac Studio Setup](#52-mac-studio-setup)
-  - [5.3 Switch Inference](#53-switch-inference)
-  - [5.4 New Model Capabilities](#54-new-model-capabilities)
 - [Part 6: Performance Comparison](#part-6-performance-comparison)
 - [Part 7: Testing & Validation](#part-7-testing--validation)
 - [Part 8: Maintenance](#part-8-maintenance)
@@ -55,10 +51,10 @@ running on hardware you own, with your data never leaving your home.
 - Private by default — nothing sent to external servers except via controlled cloud calls
 
 ### Coding Agents
-- Orchestrator agent (large, smart model) breaks down tasks and delegates
-- Worker agents (fast, specialized model) execute code, write tests, open PRs
-- Phase 1: 1–2 parallel agents at ~15–25 tok/s
-- Phase 2: 4–8 parallel agents at ~90–120 tok/s each
+- OpenClaw natively orchestrates coding agents (Claude Code, Codex) inside the NemoClaw sandbox
+- Orchestrator agent (large, smart cloud model) breaks down tasks and delegates
+- Worker agents (fast, specialized local model) execute code, write tests, open PRs
+- No separate agent VM required — NemoClaw handles isolation and orchestration
 
 ### AI-Powered Home Automation
 - Home Assistant with local LLM for natural language automations
@@ -82,7 +78,7 @@ running on hardware you own, with your data never leaving your home.
 | Requirement | Approach |
 |-------------|---------|
 | **Privacy** | All AI inference runs locally. Cloud relay (OpenClaw gateway, Nabu Casa) are dumb pipes — they move bytes, never process content |
-| **Security** | NemoClaw OpenShell sandbox isolates the AI agent. Agent Swarm VM isolated via internal Proxmox bridge. No public inbound ports. |
+| **Security** | NemoClaw OpenShell sandbox isolates the AI agent. No public inbound ports. |
 | **Always-on** | Proxmox auto-starts VMs on boot. Systemd services restart on failure. |
 | **Router compatibility** | Designed for standard home routers including Google Nest. No VLANs or managed switch required. Network isolation is handled by Proxmox internally. |
 | **Upgrade path** | Phase 1 is fully functional. Phase 2 adds Mac Studio — one config change per VM, nothing else changes. |
@@ -102,24 +98,22 @@ running on hardware you own, with your data never leaving your home.
 ║  │                  MS-S1 MAX (192.168.1.20)                     │  ║
 ║  │                  Proxmox VE — Bare Metal                      │  ║
 ║  │                                                               │  ║
+║  │  ┌──────────────────────────────────────────────────────┐    │  ║
+║  │  │  NemoClaw VM  (192.168.1.21)                         │    │  ║
+║  │  │                                                      │    │  ║
+║  │  │  OpenClaw agent          OpenShell sandbox           │    │  ║
+║  │  │  WhatsApp gateway        Coding agent orchestration  │    │  ║
+║  │  │                                                      │    │  ║
+║  │  │  Main model:   Nemotron 120B (NVIDIA cloud, free)    │    │  ║
+║  │  │  Worker model: Qwen 2.5 Coder 32B (local Ollama)     │    │  ║
+║  │  └──────────────────────────────────────────────────────┘    │  ║
+║  │                                                               │  ║
 ║  │  ┌──────────────────────┐  ┌──────────────────────────────┐  │  ║
-║  │  │  NemoClaw VM         │  │  Agent Swarm VM              │  │  ║
-║  │  │  192.168.1.21        │  │  internal only (no LAN IP)   │  │  ║
-║  │  │                      │  │                              │  │  ║
-║  │  │  OpenClaw agent      │  │  Coding agents               │  │  ║
-║  │  │  OpenShell sandbox   │  │  Claude Code / Codex         │  │  ║
-║  │  │  WhatsApp gateway    │  │  OpenHands                   │  │  ║
-║  │  │                      │  │  → Ollama (local)            │  │  ║
-║  │  │  Main model:         │  │  → Qwen 2.5 Coder 32B        │  │  ║
-║  │  │  Nemotron 120B cloud │  │                              │  │  ║
-║  │  │  Worker model:       │  └──────────────────────────────┘  │  ║
-║  │  │  Qwen 2.5 Coder 32B  │                                    │  ║
-║  │  └──────────────────────┘  ┌──────────────────────────────┐  │  ║
-║  │                            │  Media Server VM             │  │  ║
-║  │  ┌──────────────────────┐  │  192.168.1.22               │  │  ║
-║  │  │  Ollama (host)       │  │  Plex / Jellyfin             │  │  ║
-║  │  │  Radeon 890M (40 CU) │  │  AMD HW transcoding         │  │  ║
-║  │  │  Qwen 2.5 Coder 32B  │◄─┤  → external USB / NAS       │  │  ║
+║  │  │  Ollama LXC          │  │  Media Server VM             │  │  ║
+║  │  │  192.168.1.25        │  │  192.168.1.22               │  │  ║
+║  │  │                      │  │  Plex / Jellyfin             │  │  ║
+║  │  │  Radeon 890M (40 CU) │  │  AMD HW transcoding (VAAPI)  │  │  ║
+║  │  │  Qwen 2.5 Coder 32B  │  │  → external USB / NAS       │  │  ║
 ║  │  │  Qwen 2.5 7B (HA)    │  └──────────────────────────────┘  │  ║
 ║  │  │  phi3:mini (fast)    │                                    │  ║
 ║  │  └──────────────────────┘                                    │  ║
@@ -131,7 +125,7 @@ running on hardware you own, with your data never leaving your home.
 ║  │  Home Assistant OS   │                                           ║
 ║  │  Frigate NVR         │                                           ║
 ║  │  Google Coral TPU    │                                           ║
-║  │  → Ollama on MS-S1   │                                           ║
+║  │  → Ollama LXC        │                                           ║
 ║  └──────────────────────┘                                           ║
 ╚══════════════════════════════════════════════════════════════════════╝
                               │
@@ -162,11 +156,11 @@ running on hardware you own, with your data never leaving your home.
 ║  │  Proxmox — Orchestration      │  │  (192.168.1.10)           │  ║
 ║  │                               │  │                           │  ║
 ║  │  NemoClaw VM ──────────────────┼─►│  Ollama                  │  ║
-║  │  Agent Swarm VM ───────────────┼─►│  70B / 120B / 200B+      │  ║
+║  │  Ollama LXC (fallback/HA) ────┘  │  70B / 120B / 200B+      │  ║
 ║  │  Media Server VM (unchanged)  │  │  models                   │  ║
 ║  │                               │  │                           │  ║
-║  │  Ollama still runs locally    │  │  256GB unified memory     │  ║
-║  │  (fallback / small/fast tasks)│  │  4–8 parallel agents      │  ║
+║  │                               │  │  256GB unified memory     │  ║
+║  │                               │  │  4–8 parallel agents      │  ║
 ║  └───────────────────────────────┘  └───────────────────────────┘  ║
 ║                                                                      ║
 ║  ┌──────────────────────┐                                           ║
@@ -198,21 +192,18 @@ OpenClaw Cloud Gateway → WhatsApp → Your phone
 ## Network Design
 
 No VLANs. No managed switch. No special router required.
-All isolation is handled internally by Proxmox.
 
 ```
 Google Nest Router (192.168.1.1)
     │
     ├── MS-S1 MAX Proxmox host (192.168.1.20)  ← one device on LAN
-    │       └── VMs with LAN IPs get DHCP reservations from Nest
+    │       ├── NemoClaw VM    (192.168.1.21)
+    │       ├── Ollama LXC     (192.168.1.25)
+    │       └── Media Server VM (192.168.1.22)
     │
     ├── Raspberry Pi (192.168.1.30)
     ├── Mac Studio — Phase 2 (192.168.1.10)
     └── Your phones, laptops, etc.
-
-Inside Proxmox (never touches the router):
-    vmbr1 (internal bridge)
-        └── Agent Swarm VM (192.168.20.10)  ← no external IP, fully isolated
 ```
 
 ### Static IP Assignments
@@ -220,13 +211,12 @@ Inside Proxmox (never touches the router):
 Set DHCP reservations in Google Nest app by MAC address:
 
 | Device | IP | How to set |
-|--------|----|-----------| 
+|--------|----|-----------|
 | MS-S1 MAX (Proxmox) | 192.168.1.20 | Nest app → Devices → Reserve IP |
 | Raspberry Pi | 192.168.1.30 | Nest app → Devices → Reserve IP |
 | Mac Studio (Phase 2) | 192.168.1.10 | Nest app → Devices → Reserve IP |
 
-VMs inside Proxmox (NemoClaw VM, Media Server VM) get their IPs assigned by the Proxmox DHCP
-or set statically in each VM's netplan config.
+VMs and LXC containers inside Proxmox get their IPs set statically in their netplan/network config.
 
 ---
 
@@ -279,12 +269,12 @@ or set statically in each VM's netplan config.
 | Ubuntu 22.04 LTS | VMs on Proxmox | Free |
 | NemoClaw | NemoClaw VM | Free |
 | OpenClaw | Inside NemoClaw sandbox | Subscription |
-| Ollama | MS-S1 MAX host + Mac Studio (Phase 2) | Free |
+| Ollama | Ollama LXC + Mac Studio (Phase 2) | Free |
 | Plex or Jellyfin | Media Server VM | Free (Jellyfin) / Freemium (Plex) |
 | Home Assistant OS | Raspberry Pi | Free |
 | Nabu Casa | Cloud | $6.50/mo |
 | Tailscale | MS-S1 MAX + Phone | Free (personal) |
-| Docker CE | Agent Swarm VM | Free |
+| Docker CE | NemoClaw VM (for coding agents) | Free |
 
 ---
 
@@ -352,50 +342,25 @@ dpkg-reconfigure --priority=low unattended-upgrades
 
 ## 4.2 VM Design
 
-Three VMs run on the MS-S1 MAX. Resource allocation from 128GB total:
+Two VMs and one LXC container run on the MS-S1 MAX. Resource allocation from 128GB total:
 
-| VM | vCPU | RAM | Disk | Network | Purpose |
-|----|------|-----|------|---------|---------|
-| NemoClaw VM | 4 | 16GB | 80GB | vmbr0 (LAN) | OpenClaw + NemoClaw sandbox |
-| Agent Swarm VM | 8 | 32GB | 200GB | vmbr1 (internal only) | Coding agents |
-| Media Server VM | 4 | 4GB | 100GB | vmbr0 (LAN) | Plex/Jellyfin |
-| **Proxmox host** | — | ~8GB | — | — | OS overhead + Ollama |
-| **Available for Ollama** | 4 | ~64GB | — | — | Model inference |
+| Component | vCPU | RAM | Disk | Network | Purpose |
+|-----------|------|-----|------|---------|---------|
+| NemoClaw VM | 4 | 16GB | 80GB | vmbr0 (LAN) | OpenClaw + NemoClaw sandbox + coding agents |
+| Media Server VM | 4 | 8GB | 100GB | vmbr0 (LAN) | Plex/Jellyfin |
+| Ollama LXC | 4 | 8GB* | 32GB | vmbr0 (LAN) | Model inference |
+| **Proxmox host** | — | ~8GB | — | — | OS overhead |
+| **Available for model weights** | — | ~88GB | — | — | Unified memory pool for Ollama |
 
-> Ollama runs on the **Proxmox host** (bare metal), not inside a VM, so the AMD Radeon 890M
-> GPU is directly accessible without GPU passthrough complexity.
+> \* The Ollama LXC's declared 8GB RAM covers process overhead only. Model weights load
+> into the AMD Radeon 890M's unified memory pool via the bind-mounted DRI device — this is
+> separate from the container's declared RAM budget. With VMs and host consuming ~40GB,
+> approximately 88GB of the 128GB unified pool is available for models.
 
-### Create Internal Bridge for Agent Swarm
-
-In Proxmox UI: **Node → System → Network → Create → Linux Bridge**
-
-```
-Name:         vmbr1
-IP:           192.168.20.1/24
-Bridge ports: (none — internal only)
-Comment:      Agent Swarm internal network
-```
-
-Enable NAT so Agent Swarm can reach the internet (for git, packages) but not LAN:
-
-```bash
-# On Proxmox host:
-echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf
-sysctl -p
-
-# NAT for Agent Swarm internet access
-iptables -t nat -A POSTROUTING -s 192.168.20.0/24 -o vmbr0 -j MASQUERADE
-
-# Block Agent Swarm from reaching LAN (except Ollama port)
-iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.20 -p tcp --dport 11434 -j ACCEPT
-iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.0/24 -j DROP
-iptables -A FORWARD -s 192.168.20.0/24 -p tcp -m multiport --dports 80,443 -j ACCEPT
-iptables -A FORWARD -s 192.168.20.0/24 -j DROP
-
-apt install -y iptables-persistent
-netfilter-persistent save
-```
+> **Why no Agent Swarm VM?** OpenClaw natively orchestrates coding agents (Claude Code, Codex)
+> inside the NemoClaw sandbox via its built-in ACP harness. A separate agent VM would duplicate
+> this capability while adding complexity and consuming 32GB of RAM that's better used for
+> larger models.
 
 ### Create Each VM
 
@@ -411,18 +376,9 @@ RAM:   16384 MB
 Net:   vmbr0, VirtIO
 ```
 
-**Agent Swarm VM:**
-```
-VM ID: 101  |  Name: agent-swarm
-Disk:  200GB VirtIO SCSI
-CPU:   8 cores, type: host
-RAM:   32768 MB
-Net:   vmbr1, VirtIO   ← internal only
-```
-
 **Media Server VM:**
 ```
-VM ID: 102  |  Name: media-server
+VM ID: 101  |  Name: media-server
 Disk:  100GB VirtIO SCSI
 CPU:   4 cores, type: host
 RAM:   8192 MB
@@ -432,15 +388,29 @@ Net:   vmbr0, VirtIO
 For each VM, install Ubuntu 22.04 and set a static IP:
 
 ```yaml
-# /etc/netplan/00-installer-config.yaml (NemoClaw VM example)
+# /etc/netplan/00-installer-config.yaml (NemoClaw VM)
 network:
   version: 2
   ethernets:
     ens18:
-      addresses: [192.168.1.21/24]      # 192.168.1.22 for media, 192.168.20.10 for agent swarm
+      addresses: [192.168.1.21/24]
       routes:
         - to: default
-          via: 192.168.1.1              # 192.168.20.1 for agent swarm
+          via: 192.168.1.1
+      nameservers:
+        addresses: [8.8.8.8]
+```
+
+```yaml
+# /etc/netplan/00-installer-config.yaml (Media Server VM)
+network:
+  version: 2
+  ethernets:
+    ens18:
+      addresses: [192.168.1.22/24]
+      routes:
+        - to: default
+          via: 192.168.1.1
       nameservers:
         addresses: [8.8.8.8]
 ```
@@ -456,13 +426,15 @@ sudo netplan apply
 > NemoClaw is NVIDIA's open-source plugin that wraps OpenClaw in a hardened sandbox.
 > It intercepts all inference calls and routes them through NVIDIA OpenShell,
 > enforcing network egress policy, filesystem isolation, and process sandboxing.
+> OpenClaw's built-in coding agent orchestration (Claude Code, Codex via ACP harness)
+> runs directly inside this sandbox — no separate agent VM required.
 
 ### Prerequisites on the NemoClaw VM
 
 ```bash
 ssh ubuntu@192.168.1.21
 
-# Docker (required by NemoClaw/OpenShell)
+# Docker (required by NemoClaw/OpenShell and coding agent runners)
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER && newgrp docker
 
@@ -535,12 +507,12 @@ nemoclaw my-assistant connect      # Shell into sandbox
 
 ## 4.4 Ollama + Local Models
 
-> **Architecture note (credit: Gemini review):** Running Ollama directly on the Proxmox host
-> is an anti-pattern. If Ollama crashes due to a memory leak or a bad model, it can freeze
-> the entire hypervisor — taking down your HA, media server, and NemoClaw VMs with it.
+> **Architecture note:** Running Ollama directly on the Proxmox host is an anti-pattern.
+> If Ollama crashes due to a memory leak or a bad model, it can freeze the entire hypervisor —
+> taking down your HA, media server, and NemoClaw VMs with it.
 >
 > **The fix:** Run Ollama inside a **Proxmox LXC container** with the GPU device bind-mounted
-> in. Ollama gets native Radeon 890M access, but a crash stays contained to the LXC — 
+> in. Ollama gets native Radeon 890M access, but a crash stays contained to the LXC —
 > Proxmox and your other VMs are unaffected.
 
 ### Step 1: Create the Ollama LXC Container
@@ -596,11 +568,12 @@ curl -fsSL https://ollama.com/install.sh | sh
 ls /dev/dri/
 # Should show: card0  renderD128
 
-# Configure Ollama to serve on LAN
+# Configure Ollama to serve on LAN with extended context window support
 mkdir -p /etc/systemd/system/ollama.service.d
 cat > /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
 [Service]
 Environment="OLLAMA_HOST=0.0.0.0:11434"
+Environment="OLLAMA_NUM_CTX=32768"
 EOF
 
 systemctl daemon-reload
@@ -612,13 +585,20 @@ ollama run phi3:mini "hello" --verbose
 # Look for: "using GPU: AMD Radeon Graphics" in output
 ```
 
+> **Context window note:** `OLLAMA_NUM_CTX=32768` sets the default context window to 32K
+> tokens for all models. You can override per-request, or increase to `65536` / `131072`
+> for 64K / 128K context. Larger context consumes more unified memory (KV cache) —
+> a 32B model at 128K context uses ~15–20GB of KV cache on top of ~20GB for model weights.
+> 32K is a good default; increase only if you regularly work with very large documents or
+> codebases in a single session.
+
 ### Step 4: Pull Models
 
 ```bash
 # Coding agents (primary worker model)
 ollama pull qwen2.5-coder:32b
 
-# Home Assistant automations (fast, lightweight)
+# Home Assistant automations (dedicated instance — see Step 5)
 ollama pull qwen2.5:7b
 
 # Fast fallback for simple tasks
@@ -627,19 +607,18 @@ ollama pull phi3:mini
 ollama list
 ```
 
-### Step 5: Model Priority Scheduling
+### Step 5: Dedicated Home Assistant Inference Instance
 
-> **Architecture note (credit: Gemini review):** All models share the 270 GB/s memory
-> bandwidth. If Home Assistant triggers an automation while coding agents are running,
+> **Why a separate instance?** All models share the 270 GB/s memory bandwidth.
+> If Home Assistant triggers an automation while a coding agent is running,
 > the HA model can get starved — causing smart home commands to lag.
 >
-> **The fix:** Run two separate Ollama instances on different ports — one dedicated to HA
-> (high priority, always responsive), one for agents (background work).
+> Running two Ollama instances on different ports gives HA a dedicated slot —
+> always responsive, zero contention with agent work.
 
 ```bash
 # Inside the Ollama LXC — create a second Ollama instance for Home Assistant
 
-# HA-dedicated instance (port 11435, high priority)
 cat > /etc/systemd/system/ollama-ha.service << 'EOF'
 [Unit]
 Description=Ollama HA Instance
@@ -648,6 +627,7 @@ After=network.target
 [Service]
 ExecStart=/usr/local/bin/ollama serve
 Environment="OLLAMA_HOST=0.0.0.0:11435"
+Environment="OLLAMA_NUM_CTX=8192"
 Environment="OLLAMA_MAX_LOADED_MODELS=1"
 Environment="OLLAMA_NUM_PARALLEL=1"
 Restart=always
@@ -659,7 +639,7 @@ EOF
 systemctl enable ollama-ha
 systemctl start ollama-ha
 
-# Pull HA model into this instance
+# Pull HA models into this instance
 OLLAMA_HOST=localhost:11435 ollama pull qwen2.5:7b
 OLLAMA_HOST=localhost:11435 ollama pull phi3:mini
 ```
@@ -671,7 +651,6 @@ Host: http://192.168.1.25:11435   ← dedicated HA port
 ```
 
 Coding agents continue to use port 11434 (main Ollama instance).
-HA commands now always get a dedicated inference slot — zero contention.
 
 ### Model Allocation by Use Case
 
@@ -682,7 +661,7 @@ HA commands now always get a dedicated inference slot — zero contention.
 | `qwen2.5:7b` | HA dedicated | 11435 | ~5GB | ~50–70 tok/s |
 | `phi3:mini` | HA dedicated | 11435 | ~2GB | ~100+ tok/s |
 
-Total memory footprint: ~29GB of the 128GB unified pool.
+Total model footprint: ~29GB of the ~88GB available in the unified memory pool.
 
 ### Restrict LAN Access to Ollama LXC
 
@@ -690,8 +669,8 @@ Total memory footprint: ~29GB of the 128GB unified pool.
 # On Proxmox host — allow LAN to reach both Ollama ports, block everything else
 iptables -A FORWARD -s 192.168.1.0/24 -d 192.168.1.25 -p tcp --dport 11434 -j ACCEPT
 iptables -A FORWARD -s 192.168.1.0/24 -d 192.168.1.25 -p tcp --dport 11435 -j ACCEPT
-iptables -A FORWARD -s 192.168.20.0/24 -d 192.168.1.25 -p tcp --dport 11434 -j ACCEPT
-iptables -A FORWARD -d 192.168.1.25 -p tcp -m multiport --dports 11434,11435 -j DROP
+iptables -A FORWARD -d 192.168.1.25 -j DROP
+apt install -y iptables-persistent
 netfilter-persistent save
 ```
 
@@ -700,7 +679,8 @@ netfilter-persistent save
 ## 4.5 Multi-Agent Configuration
 
 OpenClaw's agent config points the main orchestrator at the NVIDIA cloud model
-and coding workers at local Ollama.
+and coding workers at local Ollama. Coding agents (Claude Code, Codex) are spawned
+directly by OpenClaw inside the NemoClaw sandbox via its built-in ACP harness.
 
 Edit `/home/ubuntu/.openclaw/openclaw.json` inside the NemoClaw sandbox:
 
@@ -756,57 +736,7 @@ Allow Ollama endpoint in OpenShell network policy:
 ```bash
 # On NemoClaw VM host (not inside sandbox)
 openshell policy add --sandbox my-assistant \
-  --host 192.168.1.20 --port 11434 --protocol rest --name ollama-local
-```
-
-### Agent Swarm VM Setup
-
-```bash
-ssh ubuntu@192.168.20.10
-
-# Docker
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER && newgrp docker
-
-# Node.js
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs python3 python3-pip
-
-# Claude Code CLI
-npm install -g @anthropic-ai/claude-code
-
-# OpenAI Codex CLI
-npm install -g @openai/codex
-
-# Point all agents at local Ollama
-echo 'OLLAMA_HOST=http://192.168.1.25:11434' | sudo tee -a /etc/environment
-echo 'OPENAI_BASE_URL=http://192.168.1.25:11434/v1' | sudo tee -a /etc/environment
-echo 'OPENAI_API_KEY=ollama' | sudo tee -a /etc/environment
-source /etc/environment
-```
-
-### OpenHands (Self-Hosted Coding Agent UI)
-
-```bash
-# On Agent Swarm VM
-mkdir -p ~/openhands && cd ~/openhands
-cat > docker-compose.yml << 'EOF'
-services:
-  openhands:
-    image: ghcr.io/all-hands-ai/openhands:main
-    ports:
-      - "3000:3000"
-    environment:
-      - LLM_API_KEY=ollama
-      - LLM_BASE_URL=http://192.168.1.25:11434
-      - LLM_MODEL=ollama/qwen2.5-coder:32b
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ~/.openhands-state:/.openhands-state
-    restart: unless-stopped
-EOF
-docker compose up -d
-# Access: http://192.168.1.20:3000 (via Proxmox port forward) or directly
+  --host 192.168.1.25 --port 11434 --protocol rest --name ollama-local
 ```
 
 ---
@@ -815,20 +745,40 @@ docker compose up -d
 
 Plex and Jellyfin both support AMD hardware transcoding via VAAPI on Linux.
 
-### GPU Passthrough to Media Server VM
+### GPU Access for Hardware Transcoding
 
-For hardware transcoding, the AMD Radeon 890M needs to be accessible inside the VM.
-Use Proxmox's VAAPI device passthrough (simpler than full GPU passthrough):
+The AMD Radeon 890M is already bind-mounted into the Ollama LXC. Full PCIe passthrough
+to a VM gives that VM **exclusive** GPU ownership — it disappears from the host and LXC
+entirely, breaking Ollama inference. There is no shared-passthrough option for QEMU VMs
+on this GPU.
+
+**Recommended: Convert Media Server to an LXC container.**
+
+LXC containers share the host kernel and support the same `/dev/dri` bind-mount used by
+the Ollama LXC. Both containers can use the GPU simultaneously for their respective tasks
+(inference and transcoding). Jellyfin runs perfectly in an LXC with lower overhead than
+a full VM.
+
+To convert: in Proxmox, delete the Media Server VM and create a new LXC container
+(Ubuntu 22.04, same IP/resources). Then add the same GPU bind-mount lines to its config:
 
 ```bash
-# On Proxmox host — find the render device
-ls /dev/dri/
-# Should show: card0, renderD128
-
-# In Proxmox UI: Media Server VM → Hardware → Add → PCI Device
-# Select: AMD Radeon 890M
-# Check: All Functions, Primary GPU: NO
+nano /etc/pve/lxc/201.conf
 ```
+
+```
+# GPU device access for VAAPI transcoding (same as Ollama LXC)
+lxc.cgroup2.devices.allow: c 226:0 rwm
+lxc.cgroup2.devices.allow: c 226:128 rwm
+lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+lxc.mount.entry: /dev/dri/card0 dev/dri/card0 none bind,optional,create=file
+lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
+```
+
+> **Keeping it as a VM?** You can still run Jellyfin in the VM — it will use software
+> transcoding instead of hardware acceleration. For personal use with a few streams,
+> software transcoding on 4 vCPUs is generally fine. Hardware transcoding only becomes
+> necessary when handling many simultaneous streams or heavy 4K remuxing.
 
 ### Install Jellyfin (Free, Recommended)
 
@@ -926,11 +876,13 @@ cameras:
 
 ```
 Settings → Devices & Services → Add Integration → Search "Ollama"
-Host: http://192.168.1.25:11434
+Host: http://192.168.1.25:11435   ← dedicated HA port
 Model: qwen2.5:7b
 ```
 
 This creates a local LLM Conversation Agent for voice commands and AI automations.
+The dedicated HA Ollama instance (port 11435) ensures smart home responses are always
+fast, regardless of what coding agents are doing on the main instance (port 11434).
 
 ### Nabu Casa Remote Access
 
@@ -1024,8 +976,6 @@ Open browser on phone → http://100.64.0.1:11434/api/tags
 Should return JSON list of your Ollama models
 ```
 
-If you see the model list, your phone can reach your local LLM from anywhere.
-
 ---
 
 ### Chat with Your Local LLM from iPhone
@@ -1037,38 +987,25 @@ If you see the model list, your phone can reach your local LLM from anywhere.
 3. Enter: `http://100.64.0.1:11434` (your Tailscale IP)
 4. Tap Connect → select a model → start chatting
 
-Enchanted gives you a ChatGPT-style interface talking directly to your home Ollama.
-100% private. No data leaves your home network.
-
 **Open WebUI (browser-based — works on iPhone and Android)**
 
 Deploy on your Media Server VM:
 
 ```bash
 ssh ubuntu@192.168.1.22
-docker run -d   -p 8080:8080   -e OLLAMA_BASE_URL=http://192.168.1.25:11434   --name open-webui   --restart unless-stopped   ghcr.io/open-webui/open-webui:main
+docker run -d \
+  -p 8080:8080 \
+  -e OLLAMA_BASE_URL=http://192.168.1.25:11434 \
+  --name open-webui \
+  --restart unless-stopped \
+  ghcr.io/open-webui/open-webui:main
 ```
 
 Access via Tailscale from any browser: `http://100.64.0.1:8080`
-Works on iPhone, Android, laptop — no app install required.
-
----
-
-### Chat with Your Local LLM from Android
-
-**Open WebUI (browser — recommended)**
-Same as above. Open `http://100.64.0.1:8080` in Chrome on cellular.
-
-**Ollama Android apps:**
-Search "Ollama" on Play Store — several apps support custom server URLs.
-Set server to `http://100.64.0.1:11434`.
 
 ---
 
 ### Lock Down Tailscale Access (Optional but Recommended)
-
-By default, any device on your Tailscale network can reach Ollama.
-Use ACLs to restrict access to just your phone:
 
 In Tailscale admin console → **Access Controls**:
 
@@ -1091,8 +1028,6 @@ In Tailscale admin console → **Access Controls**:
 Tag your devices in the Tailscale admin console:
 - MS-S1 MAX → `tag:homeserver`
 - Your phone → `tag:phone`
-
-Now only your tagged phone can reach port 11434, even if other devices join your Tailscale network.
 
 ---
 
@@ -1123,8 +1058,7 @@ from your phone — still fully private, still no port forwarding.
 
 - [ ] Proxmox UI accessible from LAN only (UFW rule in place)
 - [ ] SSH accessible from LAN only
-- [ ] Ollama port 11434 blocked from internet (iptables rule in place)
-- [ ] Agent Swarm VM cannot reach NemoClaw VM or other LAN devices (iptables DROP rule)
+- [ ] Ollama ports 11434/11435 blocked from internet (iptables rules in place)
 - [ ] iptables rules persistent (iptables-persistent installed)
 - [ ] Proxmox updated regularly
 
@@ -1160,6 +1094,7 @@ Phase 2 adds the Mac Studio as a dedicated inference server.
 | Privacy | Cloud for main agent | 100% local |
 | Rate limits | NVIDIA free tier applies | None |
 | Max model size | 32B practical | 200B+ |
+| Context window | 32K default | 128K+ comfortable |
 
 ---
 
@@ -1185,24 +1120,30 @@ System Settings → General → Sharing → Screen Sharing: OFF
 
 ```bash
 brew install --cask ollama
-# Or: curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-### Configure Ollama to Serve LAN
+### Configure Ollama to Serve LAN with Extended Context
 
 ```bash
 # Edit Ollama launchd service
 sudo nano /Library/LaunchDaemons/com.ollama.ollama.plist
 ```
 
-Add environment variable for host binding:
+Add environment variables:
 ```xml
 <key>EnvironmentVariables</key>
 <dict>
   <key>OLLAMA_HOST</key>
   <string>0.0.0.0:11434</string>
+  <key>OLLAMA_NUM_CTX</key>
+  <string>65536</string>
 </dict>
 ```
+
+> **Context window note:** 65536 sets the default to 64K tokens. With 192–256GB unified
+> memory, the Mac Studio handles 128K context (`131072`) comfortably even on 70B models.
+> The KV cache for a 70B model at 128K context is ~40–50GB — well within the Mac Studio's
+> memory budget alongside the model weights (~45GB).
 
 ```bash
 sudo launchctl unload /Library/LaunchDaemons/com.ollama.ollama.plist
@@ -1222,7 +1163,7 @@ block in proto tcp to any port 11434
 ```
 
 ```bash
-# Load anchor (add to /etc/pf.conf before final pass rule):
+# Add to /etc/pf.conf before final pass rule:
 # anchor "ollama-protect"
 # load anchor "ollama-protect" from "/etc/pf.anchors/ollama-protect"
 
@@ -1245,7 +1186,6 @@ ollama pull deepseek-r1:70b
 # Home Assistant (fast)
 ollama pull qwen2.5:7b
 
-# List installed
 ollama list
 ```
 
@@ -1269,7 +1209,7 @@ nemoclaw my-assistant connect
 sandbox$ nano ~/.openclaw/openclaw.json
 ```
 
-Change Ollama baseUrl from `192.168.1.20` to `192.168.1.10`:
+Change Ollama baseUrl to Mac Studio:
 
 ```json
 "ollama": {
@@ -1296,15 +1236,6 @@ openshell policy add --sandbox my-assistant \
   --host 192.168.1.10 --port 11434 --protocol rest --name mac-studio-ollama
 ```
 
-### Agent Swarm VM
-
-```bash
-# Update environment
-sudo sed -i 's/192.168.1.20/192.168.1.10/g' /etc/environment
-source /etc/environment
-# Restart any running agent services
-```
-
 ### Home Assistant
 
 ```
@@ -1312,6 +1243,9 @@ Settings → Devices & Services → Ollama → Configure
 Host: http://192.168.1.10:11434
 Model: qwen2.5:7b
 ```
+
+> In Phase 2, HA talks directly to the Mac Studio Ollama on port 11434. The dedicated
+> HA instance on port 11435 (Ollama LXC) can be kept as a fallback or decommissioned.
 
 ---
 
@@ -1338,7 +1272,14 @@ Model: qwen2.5:7b
 
 With 256GB you can run 2–3 large models simultaneously for true parallel agent swarms.
 
----
+### Context Window in Phase 2
+
+| Model | Default context | Comfortable max | KV cache at max |
+|-------|----------------|----------------|-----------------|
+| qwen2.5:7b | 32K | 128K | ~5GB |
+| llama3.1:70b | 64K | 128K | ~40GB |
+| qwen2.5-coder:72b | 32K | 128K | ~42GB |
+| deepseek-r1:70b | 64K | 128K | ~40GB |
 
 ---
 
@@ -1346,44 +1287,25 @@ With 256GB you can run 2–3 large models simultaneously for true parallel agent
 
 ## Why Phase 3
 
-Phase 1 isolation is handled by Proxmox internally — the agent swarm has no LAN IP and
-can't reach the Mac Studio. Phase 2 adds the Mac Studio protected by its own `pf` firewall.
+Phase 1 isolation is handled by Proxmox internally.
+Phase 2 adds the Mac Studio protected by its own `pf` firewall.
 
 Phase 3 upgrades isolation from **machine-enforced** to **network-enforced** — a separate
 layer of defense that operates even if a VM or OS-level control is bypassed.
-
-The trigger for Phase 3 is adding the Mac Studio (Phase 2). At that point you have two
-physical machines on your LAN, and belt-and-suspenders security means the router itself
-enforces what can talk to what — independent of any software on either machine.
 
 ## Additional Hardware Required
 
 | Item | Model | Price | Notes |
 |------|-------|-------|-------|
-| **VLAN-capable router** | UniFi Express | ~$150 | Replaces Google Nest. Router + managed switch in one. VLAN, firewall rules, traffic monitoring. |
-
-The UniFi Express is the cleanest single-device upgrade. It replaces your Google Nest entirely
-and adds full VLAN support, per-device firewall rules, and a monitoring dashboard.
-
-## What Changes
-
-Your Google Nest is replaced by the UniFi Express. Everything else — MS-S1 MAX, Pi,
-Mac Studio — stays identical. You just plug them into the UniFi instead of the Nest.
+| **VLAN-capable router** | UniFi Express | ~$150 | Replaces Google Nest. Router + managed switch in one. |
 
 ## VLAN Design
 
 | VLAN | Name | Subnet | Devices | Internet | Cross-VLAN |
 |------|------|--------|---------|----------|-----------|
-| 1 | Trusted | 192.168.1.0/24 | MS-S1 MAX, Mac Studio, Pi, phones, laptops | Yes | Full |
+| 1 | Trusted | 192.168.1.0/24 | MS-S1 MAX, Pi, phones, laptops | Yes | Full |
 | 20 | Inference | 192.168.2.0/24 | Mac Studio only | No | VLAN 1 → port 11434 only |
 | 30 | IoT | 192.168.3.0/24 | Smart devices, cameras | No | None |
-
-> **Mac Studio on VLAN 20 (Inference):** No internet access at all. Can only receive
-> connections on port 11434 from VLAN 1 devices. Even if macOS pf firewall were misconfigured,
-> the router blocks everything else at the network level. Belt and suspenders.
-
-> **IoT on VLAN 30:** Smart plugs, lights, cameras, etc. are completely isolated from your
-> AI stack. A compromised IoT device cannot reach Ollama, OpenClaw, or any LAN services.
 
 ## UniFi Express Setup
 
@@ -1408,9 +1330,9 @@ DHCP: Enabled
 ```
 UniFi Dashboard → Devices → [device] → Port → Network
 
-Mac Studio → VLAN 20 (Inference)
-MS-S1 MAX  → VLAN 1 (Trusted)
-Pi         → VLAN 1 (Trusted)   [or VLAN 30 if you want HA isolated]
+Mac Studio  → VLAN 20 (Inference)
+MS-S1 MAX   → VLAN 1 (Trusted)
+Pi          → VLAN 1 (Trusted)
 IoT devices → VLAN 30
 ```
 
@@ -1419,33 +1341,25 @@ IoT devices → VLAN 30
 ```
 UniFi Dashboard → Firewall & Security → Rules
 
-Rule 1: Allow VLAN 1 → VLAN 20, port 11434 (Ollama)
+Rule 1: Allow VLAN 1 → VLAN 20, port 11434 (Ollama on Mac Studio)
 Rule 2: Block VLAN 20 → internet (Mac Studio never touches WAN)
 Rule 3: Block VLAN 20 → VLAN 1 (inference can't initiate connections back)
 Rule 4: Block VLAN 30 → all (IoT can't reach anything)
 Rule 5: Allow VLAN 1 → VLAN 30, port 80/443 (you can manage IoT devices)
 ```
 
-### Update IP Assignments
+### IP Assignments After Phase 3
 
-Move Mac Studio to VLAN 20 subnet:
-
-| Device | Old IP | New IP | VLAN |
-|--------|--------|--------|------|
-| MS-S1 MAX | 192.168.1.20 | 192.168.1.20 | 1 (unchanged) |
-| Ollama LXC | 192.168.1.25 |
+| Device | Phase 2 IP | Phase 3 IP | VLAN |
+|--------|-----------|-----------|------|
+| MS-S1 MAX (Proxmox host) | 192.168.1.20 | 192.168.1.20 | 1 (unchanged) |
 | NemoClaw VM | 192.168.1.21 | 192.168.1.21 | 1 (unchanged) |
 | Media Server VM | 192.168.1.22 | 192.168.1.22 | 1 (unchanged) |
+| Ollama LXC | 192.168.1.25 | 192.168.1.25 | 1 (unchanged) |
 | Raspberry Pi | 192.168.1.30 | 192.168.1.30 | 1 (unchanged) |
 | Mac Studio | 192.168.1.10 | **192.168.2.10** | **20 (Inference)** |
 
-Update the single config reference to Mac Studio's new IP:
-
-```bash
-# On each VM that talks to Mac Studio:
-sudo sed -i 's/192.168.1.10/192.168.2.10/g' /etc/environment
-source /etc/environment
-```
+Update the config reference to Mac Studio's new IP:
 
 ```bash
 # NemoClaw sandbox:
@@ -1454,31 +1368,30 @@ sandbox$ nano ~/.openclaw/openclaw.json
 # Update ollama baseUrl to http://192.168.2.10:11434
 ```
 
+Update OpenShell policy:
+
+```bash
+openshell policy add --sandbox my-assistant \
+  --host 192.168.2.10 --port 11434 --protocol rest --name mac-studio-ollama-v2
+```
+
+Update Home Assistant:
+
+```
+Settings → Devices & Services → Ollama → Configure
+Host: http://192.168.2.10:11434
+```
+
 ## What Phase 3 Adds Over Phase 2
 
 | Security control | Phase 2 | Phase 3 |
 |-----------------|---------|---------|
-| Agent swarm isolation | Proxmox internal bridge | Proxmox + router VLAN |
 | Mac Studio internet access | Blocked by macOS pf | Blocked by router (hardware) |
 | IoT device isolation | None | VLAN 30, fully isolated |
 | Traffic visibility | None | UniFi dashboard, per-device |
 | Defense if macOS pf misconfigured | Unprotected | Router still blocks it |
 
-## Network Monitoring
-
-UniFi provides a live dashboard showing traffic per device, blocked connections, and alerts.
-
-```
-UniFi Dashboard → Insights → Traffic
-→ See exactly what each device is sending/receiving
-→ Alert on unexpected outbound connections from Mac Studio or MS-S1 MAX
-```
-
-This is the security posture of a small business — appropriate for a setup handling
-autonomous agents with internet access and sensitive personal data.
-
 ---
-
 
 # Part 6: Performance Comparison
 
@@ -1486,15 +1399,11 @@ autonomous agents with internet access and sensitive personal data.
 
 Token generation speed is limited by **memory bandwidth**, not compute.
 Every token generated requires reading the entire model's weights from memory.
-The faster your memory bandwidth, the faster tokens come out.
 
 | Hardware | Memory | Bandwidth | Implication |
 |----------|--------|-----------|-------------|
 | MS-S1 MAX (Radeon 890M) | 128GB LPDDR5X | ~270 GB/s | Good for smaller models, limited parallelism |
 | Mac Studio M5 Ultra | 256GB unified | ~800 GB/s | ~3× faster per token, handles multiple large models |
-
-This is why the Mac Studio isn't just "more storage" — it's fundamentally faster at
-inference because Apple Silicon's memory bandwidth is in a different class.
 
 ---
 
@@ -1519,21 +1428,14 @@ inference because Apple Silicon's memory bandwidth is in a different class.
 
 ## Concurrent Models: What Fits Simultaneously
 
-### Phase 1 — MS-S1 MAX (128GB)
-
-Ollama keeps loaded models in memory until evicted. Multiple models can be loaded at once
-if they fit. The constraint is total memory and bandwidth contention under parallel load.
+### Phase 1 — MS-S1 MAX (128GB, ~88GB available for models)
 
 | Scenario | Models loaded | RAM used | Concurrent agents | Notes |
 |----------|--------------|----------|------------------|-------|
-| Minimal | phi3:mini only | ~4GB | 2–3 | Fast but low quality |
-| Typical | qwen2.5-coder:32b + qwen2.5:7b | ~27GB | 1–2 | Good balance |
-| Heavy | qwen2.5-coder:32b + llama3.1:70b | ~67GB | 1 each | Both loaded, queued requests |
-| Max | All three models loaded | ~29GB | 1–2 | Bandwidth splits under concurrency |
-
-**The concurrency ceiling in Phase 1:** When 2+ agents request inference simultaneously,
-they share the Radeon 890M's 270 GB/s bandwidth. Each agent's throughput drops proportionally.
-Two agents running Qwen 32B = ~8–12 tok/s each instead of 15–25 tok/s.
+| Minimal | phi3:mini only | ~2GB | 2–3 | Fast but low quality |
+| Typical | qwen2.5-coder:32b + qwen2.5:7b (HA) | ~27GB | 1–2 agents | Good balance |
+| Heavy | qwen2.5-coder:32b + 32K context | ~38GB | 1–2 agents | Comfortable |
+| Extended context | qwen2.5-coder:32b + 128K context | ~40GB | 1 agent | Max context, still fits |
 
 ### Phase 2 — Mac Studio M5 Ultra (256GB)
 
@@ -1542,38 +1444,7 @@ Two agents running Qwen 32B = ~8–12 tok/s each instead of 15–25 tok/s.
 | Standard | qwen2.5-coder:72b + llama3.1:70b + qwen2.5:7b | ~97GB | 4–5 | Comfortable |
 | Full swarm | 4× qwen2.5-coder:32b instances | ~82GB | 4 simultaneous | Each at full speed |
 | Maximum | nemotron-ultra:253b alone | ~160GB | 1–2 | Largest available model |
-| Parallel large | qwen2.5-coder:72b + deepseek-r1:70b | ~93GB | 3–4 each | Complex tasks in parallel |
-
-**The concurrency unlock in Phase 2:** 800 GB/s bandwidth means 4 simultaneous large-model
-agents barely dent throughput. Each agent runs at near-full speed independently.
-
----
-
-## Coding & Agentic Workflow Quality
-
-| Capability | Phase 1 | Phase 2 |
-|-----------|---------|---------|
-| Single file edits | Excellent (32B) | Excellent (72B) |
-| Multi-file refactoring | Good | Excellent |
-| Architecture decisions | Adequate | Strong (70B reasoning) |
-| Long context (200K+ tokens) | Degrades at 32B | Solid at 70B+ |
-| Parallel coding agents | 1–2 (then queued) | 4–8 simultaneous full speed |
-| Largest model available | 32B practical | 253B |
-| Privacy | Main agent uses cloud | 100% local |
-| Rate limits | NVIDIA free tier | None |
-
-## Real-World Scenario: Coding Agent Swarm
-
-**Phase 1 — 2 agents working in parallel on different files:**
-- Agent 1: qwen2.5-coder:32b → ~12 tok/s (bandwidth shared)
-- Agent 2: qwen2.5-coder:32b → ~12 tok/s (bandwidth shared)
-- A 500-token code block takes ~40 seconds per agent
-- Works, but you feel the wait
-
-**Phase 2 — 4 agents working in parallel:**
-- Agents 1–4: qwen2.5-coder:72b → ~45–50 tok/s each (minimal contention)
-- A 500-token code block takes ~10 seconds per agent
-- Smarter model + 4× the agents + faster throughput = genuinely different experience
+| Long context | llama3.1:70b at 128K | ~85GB | 3–4 | Model + KV cache |
 
 ---
 
@@ -1584,15 +1455,17 @@ agents barely dent throughput. Each agent runs at near-full speed independently.
 - Work on complex multi-file or multi-repo codebases
 - Want 100% private inference (nothing to cloud)
 - Hit NVIDIA rate limits on heavy agentic workflows
-- Want to run 70B+ models locally at usable speed
+- Want 70B+ models at usable speed
+- Want 64K–128K context windows as a comfortable default
 
 **Not yet, if you:**
-- Use this primarily as a personal assistant
+- Use this primarily as a personal assistant (Nemotron 120B handles this well)
 - Run single coding agent tasks occasionally
-- Are satisfied with the Nemotron 120B cloud model for orchestration
+- Are satisfied with 32K context for your workloads
 
 **Recommendation:** Live in Phase 1 for 2–3 months.
-If you find yourself waiting on inference or wanting more parallel agents, that's your signal.
+If you find yourself waiting on inference, wanting more parallel agents, or bumping into
+context length limits, that's your signal.
 
 ---
 
@@ -1605,26 +1478,25 @@ If you find yourself waiting on inference or wanting more parallel agents, that'
 curl http://192.168.1.25:11434/api/tags
 # Expected: JSON list of installed models
 
-# From Raspberry Pi — HA can reach Ollama
-curl http://192.168.1.25:11434/api/tags
+# HA Ollama instance
+curl http://192.168.1.25:11435/api/tags
+# Expected: JSON list of HA models
+
+# From Raspberry Pi — HA can reach Ollama HA instance
+curl http://192.168.1.25:11435/api/tags
 # Expected: same JSON
 
 # Ollama NOT reachable from internet (test on cellular)
 curl --connect-timeout 5 http://YOUR_PUBLIC_IP:11434/api/tags
 # Expected: timeout / connection refused
 
-# Agent Swarm cannot reach NemoClaw VM
-ssh ubuntu@192.168.20.10
-curl --connect-timeout 3 http://192.168.1.21:18789
-# Expected: timeout (blocked by iptables)
-
-# Agent Swarm CAN reach Ollama
-curl http://192.168.1.25:11434/api/tags
-# Expected: model list
-
 # NemoClaw sandbox health
 nemoclaw my-assistant status
 # Expected: Sandbox running, inference connected
+
+# Verify context window setting
+curl http://192.168.1.25:11434/api/show -d '{"name":"qwen2.5-coder:32b"}' | grep num_ctx
+# Expected: 32768 (or your configured value)
 ```
 
 ## End-to-End WhatsApp Test
@@ -1639,6 +1511,10 @@ nemoclaw my-assistant status
 ```bash
 # Mac Studio Ollama serving on LAN
 curl http://192.168.1.10:11434/api/tags
+
+# Context window on Mac Studio
+curl http://192.168.1.10:11434/api/show -d '{"name":"llama3.1:70b"}' | grep num_ctx
+# Expected: 65536 (or your configured value)
 
 # Mac Studio Ollama NOT on internet (test from cellular)
 curl --connect-timeout 5 http://YOUR_PUBLIC_IP:11434/api/tags
@@ -1664,9 +1540,9 @@ ollama pull qwen2.5:7b
 nemoclaw my-assistant status
 openshell term   # Review any blocked network requests
 
-# Update Agent Swarm Docker images
-ssh ubuntu@192.168.20.10
-docker compose pull && docker compose up -d
+# Check both Ollama instances are running
+systemctl status ollama
+systemctl status ollama-ha
 ```
 
 ## Monthly
@@ -1677,9 +1553,13 @@ ssh root@192.168.1.20
 apt update && apt full-upgrade -y
 
 # Update all VMs
-for ip in 192.168.1.21 192.168.1.22 192.168.20.10; do
+for ip in 192.168.1.21 192.168.1.22; do
   ssh ubuntu@$ip "sudo apt update && sudo apt upgrade -y"
 done
+
+# Update Ollama LXC
+pct enter 200
+apt update && apt upgrade -y
 
 # Rotate NVIDIA API key (if concerned)
 # build.nvidia.com → API Keys → Generate New
@@ -1692,7 +1572,8 @@ done
 Datacenter → Backup → Add
 Schedule: Sunday 02:00
 Storage: local
-VMs: 100 (nemoclaw), 101 (agent-swarm), 102 (media-server)
+VMs: 100 (nemoclaw), 101 (media-server)
+LXC: 200 (ollama)
 Mode: Snapshot
 Compression: ZSTD
 ```
@@ -1711,19 +1592,18 @@ done
 
 > **Quick Reference — IP Addresses**
 >
-> | Device | IP |
-> |--------|----|
-> | Google Nest Router | 192.168.1.1 |
-> | MS-S1 MAX (Proxmox host) | 192.168.1.20 |
-> | Ollama LXC | 192.168.1.25 |
-| NemoClaw VM | 192.168.1.21 |
-> | Media Server VM | 192.168.1.22 |
-> | Agent Swarm VM | 192.168.20.10 (internal) |
-> | Raspberry Pi (HA) | 192.168.1.30 |
-> | Mac Studio (Phase 2) | 192.168.1.10 |
+> | Device | Phase 1/2 IP | Phase 3 IP | Notes |
+> |--------|-------------|-----------|-------|
+> | Google Nest Router | 192.168.1.1 | replaced by UniFi | — |
+> | MS-S1 MAX (Proxmox host) | 192.168.1.20 | 192.168.1.20 | VLAN 1 |
+> | NemoClaw VM | 192.168.1.21 | 192.168.1.21 | VLAN 1 |
+> | Media Server VM | 192.168.1.22 | 192.168.1.22 | VLAN 1 |
+> | Ollama LXC | 192.168.1.25 | 192.168.1.25 | VLAN 1 |
+> | Raspberry Pi (HA) | 192.168.1.30 | 192.168.1.30 | VLAN 1 |
+> | Mac Studio (Phase 2) | 192.168.1.10 | 192.168.2.10 | VLAN 20 (Inference) |
 
 ---
 
-*Architecture version: 2.0 — Coherent single-document rewrite*
+*Architecture version: 2.1 — Removed Agent Swarm VM (OpenClaw handles agent orchestration natively). Fixed GPU sharing. Added context window configuration. Cleaned Phase 3 tables.*
 *Hardware: Minisforum MS-S1 MAX + Raspberry Pi 4 + (Phase 2) Apple Mac Studio M5 Ultra*
-*Networking: Google Nest compatible — no VLANs, no managed switch required*
+*Networking: Google Nest compatible — no VLANs, no managed switch required in Phase 1/2*
