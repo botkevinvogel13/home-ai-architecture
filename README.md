@@ -22,6 +22,7 @@
   - [4.8 Remote Access](#48-remote-access)
   - [4.9 Security](#49-security)
 - [Part 5: Phase 2 — Mac Studio Added](#part-5-phase-2--mac-studio-added)
+- [Phase 3: Network-Level Security Hardening](#part-55-phase-3--network-level-security-hardening)
   - [5.1 What Changes](#51-what-changes)
   - [5.2 Mac Studio Setup](#52-mac-studio-setup)
   - [5.3 Switch Inference](#53-switch-inference)
@@ -1122,6 +1123,145 @@ Model: qwen2.5:7b
 With 256GB you can run 2–3 large models simultaneously for true parallel agent swarms.
 
 ---
+
+---
+
+# Part 5.5: Phase 3 — Network-Level Security Hardening
+
+## Why Phase 3
+
+Phase 1 isolation is handled by Proxmox internally — the agent swarm has no LAN IP and
+can't reach the Mac Studio. Phase 2 adds the Mac Studio protected by its own `pf` firewall.
+
+Phase 3 upgrades isolation from **machine-enforced** to **network-enforced** — a separate
+layer of defense that operates even if a VM or OS-level control is bypassed.
+
+The trigger for Phase 3 is adding the Mac Studio (Phase 2). At that point you have two
+physical machines on your LAN, and belt-and-suspenders security means the router itself
+enforces what can talk to what — independent of any software on either machine.
+
+## Additional Hardware Required
+
+| Item | Model | Price | Notes |
+|------|-------|-------|-------|
+| **VLAN-capable router** | UniFi Express | ~$150 | Replaces Google Nest. Router + managed switch in one. VLAN, firewall rules, traffic monitoring. |
+
+The UniFi Express is the cleanest single-device upgrade. It replaces your Google Nest entirely
+and adds full VLAN support, per-device firewall rules, and a monitoring dashboard.
+
+## What Changes
+
+Your Google Nest is replaced by the UniFi Express. Everything else — MS-S1 MAX, Pi,
+Mac Studio — stays identical. You just plug them into the UniFi instead of the Nest.
+
+## VLAN Design
+
+| VLAN | Name | Subnet | Devices | Internet | Cross-VLAN |
+|------|------|--------|---------|----------|-----------|
+| 1 | Trusted | 192.168.1.0/24 | MS-S1 MAX, Mac Studio, Pi, phones, laptops | Yes | Full |
+| 20 | Inference | 192.168.2.0/24 | Mac Studio only | No | VLAN 1 → port 11434 only |
+| 30 | IoT | 192.168.3.0/24 | Smart devices, cameras | No | None |
+
+> **Mac Studio on VLAN 20 (Inference):** No internet access at all. Can only receive
+> connections on port 11434 from VLAN 1 devices. Even if macOS pf firewall were misconfigured,
+> the router blocks everything else at the network level. Belt and suspenders.
+
+> **IoT on VLAN 30:** Smart plugs, lights, cameras, etc. are completely isolated from your
+> AI stack. A compromised IoT device cannot reach Ollama, OpenClaw, or any LAN services.
+
+## UniFi Express Setup
+
+### Create VLANs
+
+```
+UniFi Dashboard → Networks → Create New Network
+
+Network: Inference
+VLAN ID: 20
+Subnet: 192.168.2.1/24
+DHCP: Enabled
+
+Network: IoT
+VLAN ID: 30
+Subnet: 192.168.3.1/24
+DHCP: Enabled
+```
+
+### Assign Devices to VLANs
+
+```
+UniFi Dashboard → Devices → [device] → Port → Network
+
+Mac Studio → VLAN 20 (Inference)
+MS-S1 MAX  → VLAN 1 (Trusted)
+Pi         → VLAN 1 (Trusted)   [or VLAN 30 if you want HA isolated]
+IoT devices → VLAN 30
+```
+
+### Firewall Rules
+
+```
+UniFi Dashboard → Firewall & Security → Rules
+
+Rule 1: Allow VLAN 1 → VLAN 20, port 11434 (Ollama)
+Rule 2: Block VLAN 20 → internet (Mac Studio never touches WAN)
+Rule 3: Block VLAN 20 → VLAN 1 (inference can't initiate connections back)
+Rule 4: Block VLAN 30 → all (IoT can't reach anything)
+Rule 5: Allow VLAN 1 → VLAN 30, port 80/443 (you can manage IoT devices)
+```
+
+### Update IP Assignments
+
+Move Mac Studio to VLAN 20 subnet:
+
+| Device | Old IP | New IP | VLAN |
+|--------|--------|--------|------|
+| MS-S1 MAX | 192.168.1.20 | 192.168.1.20 | 1 (unchanged) |
+| NemoClaw VM | 192.168.1.21 | 192.168.1.21 | 1 (unchanged) |
+| Media Server VM | 192.168.1.22 | 192.168.1.22 | 1 (unchanged) |
+| Raspberry Pi | 192.168.1.30 | 192.168.1.30 | 1 (unchanged) |
+| Mac Studio | 192.168.1.10 | **192.168.2.10** | **20 (Inference)** |
+
+Update the single config reference to Mac Studio's new IP:
+
+```bash
+# On each VM that talks to Mac Studio:
+sudo sed -i 's/192.168.1.10/192.168.2.10/g' /etc/environment
+source /etc/environment
+```
+
+```bash
+# NemoClaw sandbox:
+nemoclaw my-assistant connect
+sandbox$ nano ~/.openclaw/openclaw.json
+# Update ollama baseUrl to http://192.168.2.10:11434
+```
+
+## What Phase 3 Adds Over Phase 2
+
+| Security control | Phase 2 | Phase 3 |
+|-----------------|---------|---------|
+| Agent swarm isolation | Proxmox internal bridge | Proxmox + router VLAN |
+| Mac Studio internet access | Blocked by macOS pf | Blocked by router (hardware) |
+| IoT device isolation | None | VLAN 30, fully isolated |
+| Traffic visibility | None | UniFi dashboard, per-device |
+| Defense if macOS pf misconfigured | Unprotected | Router still blocks it |
+
+## Network Monitoring
+
+UniFi provides a live dashboard showing traffic per device, blocked connections, and alerts.
+
+```
+UniFi Dashboard → Insights → Traffic
+→ See exactly what each device is sending/receiving
+→ Alert on unexpected outbound connections from Mac Studio or MS-S1 MAX
+```
+
+This is the security posture of a small business — appropriate for a setup handling
+autonomous agents with internet access and sensitive personal data.
+
+---
+
 
 # Part 6: Performance Comparison
 
