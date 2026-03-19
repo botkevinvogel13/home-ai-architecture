@@ -1,7 +1,7 @@
 # Home AI Infrastructure Architecture
 ### A Private, Powerful, Always-On AI Stack — Built in Your Home
 
-> **Version:** 2.1 | **Status:** Active  
+> **Version:** 2.2 | **Status:** Active  
 > **Hardware:** Minisforum MS-S1 MAX · Raspberry Pi 4 · (Phase 2: Apple Mac Studio)
 
 ---
@@ -11,18 +11,18 @@
 - [Part 1: Requirements & Features](#part-1-requirements--features)
 - [Part 2: System Overview](#part-2-system-overview)
 - [Part 3: Bill of Materials](#part-3-bill-of-materials)
-- [Part 4: Phase 1 — Single Machine Implementation](#part-4-phase-1--single-machine-implementation)
+- [Part 4: Phase 1 — Core AI Stack](#part-4-phase-1--core-ai-stack)
   - [4.1 MS-S1 MAX: OS & Proxmox](#41-ms-s1-max-os--proxmox)
   - [4.2 VM Design](#42-vm-design)
   - [4.3 NemoClaw + OpenClaw](#43-nemoclaw--openclaw)
   - [4.4 Ollama + Local Models](#44-ollama--local-models)
   - [4.5 Multi-Agent Configuration](#45-multi-agent-configuration)
-  - [4.6 Media Server](#46-media-server)
-  - [4.7 Home Assistant (Raspberry Pi)](#47-home-assistant-raspberry-pi)
-  - [4.8 Remote Access](#48-remote-access)
-  - [4.9 Security](#49-security)
+  - [4.6 Home Assistant (Raspberry Pi)](#46-home-assistant-raspberry-pi)
+  - [4.7 Remote Access](#47-remote-access)
+  - [4.8 Security](#48-security)
 - [Part 5: Phase 2 — Mac Studio Added](#part-5-phase-2--mac-studio-added)
-- [Phase 3: Network-Level Security Hardening](#part-55-phase-3--network-level-security-hardening)
+- [Part 5.5: Phase 3 — Network-Level Security Hardening](#part-55-phase-3--network-level-security-hardening)
+- [Part 5.6: Phase 4 — Media Server (Optional)](#part-56-phase-4--media-server-optional)
 - [Part 6: Performance Comparison](#part-6-performance-comparison)
 - [Part 7: Testing & Validation](#part-7-testing--validation)
 - [Part 8: Maintenance](#part-8-maintenance)
@@ -62,10 +62,11 @@ running on hardware you own, with your data never leaving your home.
 - AI camera analysis via Frigate + Google Coral TPU
 - Smart notifications (e.g. "a person has been at your door for 30 seconds")
 
-### Media Server
+### Media Server *(Phase 4 — Optional)*
 - Stream video and music to any device on your network or via remote access
 - Hardware-accelerated transcoding on the AMD Radeon 890M
 - Media library stored on external/NAS storage — separate from the AI stack
+- Add this any time; it does not affect the AI stack
 
 ### Remote Access
 - WhatsApp → your AI, from any phone, anywhere (via OpenClaw cloud relay)
@@ -80,8 +81,8 @@ running on hardware you own, with your data never leaving your home.
 | **Privacy** | All AI inference runs locally. Cloud relay (OpenClaw gateway, Nabu Casa) are dumb pipes — they move bytes, never process content |
 | **Security** | NemoClaw OpenShell sandbox isolates the AI agent. No public inbound ports. |
 | **Always-on** | Proxmox auto-starts VMs on boot. Systemd services restart on failure. |
-| **Router compatibility** | Designed for standard home routers including Google Nest. No VLANs or managed switch required. Network isolation is handled by Proxmox internally. |
-| **Upgrade path** | Phase 1 is fully functional. Phase 2 adds Mac Studio — one config change per VM, nothing else changes. |
+| **Router compatibility** | Designed for standard home routers including Google Nest. No VLANs or managed switch required. |
+| **Upgrade path** | Each phase is independently deployable. Phase 1 is fully functional on its own. |
 
 ---
 
@@ -108,15 +109,14 @@ running on hardware you own, with your data never leaving your home.
 ║  │  │  Worker model: Qwen 2.5 Coder 32B (local Ollama)     │    │  ║
 ║  │  └──────────────────────────────────────────────────────┘    │  ║
 ║  │                                                               │  ║
-║  │  ┌──────────────────────┐  ┌──────────────────────────────┐  │  ║
-║  │  │  Ollama LXC          │  │  Media Server VM             │  │  ║
-║  │  │  192.168.1.25        │  │  192.168.1.22               │  │  ║
-║  │  │                      │  │  Plex / Jellyfin             │  │  ║
-║  │  │  Radeon 890M (40 CU) │  │  AMD HW transcoding (VAAPI)  │  │  ║
-║  │  │  Qwen 2.5 Coder 32B  │  │  → external USB / NAS       │  │  ║
-║  │  │  Qwen 2.5 7B (HA)    │  └──────────────────────────────┘  │  ║
-║  │  │  phi3:mini (fast)    │                                    │  ║
-║  │  └──────────────────────┘                                    │  ║
+║  │  ┌──────────────────────────────────────────────────────┐    │  ║
+║  │  │  Ollama LXC  (192.168.1.25)                          │    │  ║
+║  │  │                                                      │    │  ║
+║  │  │  Radeon 890M (40 CU) — full GPU, no sharing needed   │    │  ║
+║  │  │  Qwen 2.5 Coder 32B  (agents, port 11434)            │    │  ║
+║  │  │  Qwen 2.5 7B         (HA dedicated, port 11435)      │    │  ║
+║  │  │  phi3:mini           (fast fallback)                 │    │  ║
+║  │  └──────────────────────────────────────────────────────┘    │  ║
 ║  └───────────────────────────────────────────────────────────────┘  ║
 ║                                                                      ║
 ║  ┌──────────────────────┐                                           ║
@@ -125,7 +125,7 @@ running on hardware you own, with your data never leaving your home.
 ║  │  Home Assistant OS   │                                           ║
 ║  │  Frigate NVR         │                                           ║
 ║  │  Google Coral TPU    │                                           ║
-║  │  → Ollama LXC        │                                           ║
+║  │  → Ollama LXC :11435 │                                           ║
 ║  └──────────────────────┘                                           ║
 ╚══════════════════════════════════════════════════════════════════════╝
                               │
@@ -156,9 +156,7 @@ running on hardware you own, with your data never leaving your home.
 ║  │  Proxmox — Orchestration      │  │  (192.168.1.10)           │  ║
 ║  │                               │  │                           │  ║
 ║  │  NemoClaw VM ──────────────────┼─►│  Ollama                  │  ║
-║  │  Ollama LXC (fallback/HA) ────┘  │  70B / 120B / 200B+      │  ║
-║  │  Media Server VM (unchanged)  │  │  models                   │  ║
-║  │                               │  │                           │  ║
+║  │  Ollama LXC (fallback/HA)     │  │  70B / 120B / 200B+      │  ║
 ║  │                               │  │  256GB unified memory     │  ║
 ║  │                               │  │  4–8 parallel agents      │  ║
 ║  └───────────────────────────────┘  └───────────────────────────┘  ║
@@ -198,8 +196,7 @@ Google Nest Router (192.168.1.1)
     │
     ├── MS-S1 MAX Proxmox host (192.168.1.20)  ← one device on LAN
     │       ├── NemoClaw VM    (192.168.1.21)
-    │       ├── Ollama LXC     (192.168.1.25)
-    │       └── Media Server VM (192.168.1.22)
+    │       └── Ollama LXC     (192.168.1.25)
     │
     ├── Raspberry Pi (192.168.1.30)
     ├── Mac Studio — Phase 2 (192.168.1.10)
@@ -229,23 +226,14 @@ VMs and LXC containers inside Proxmox get their IPs set statically in their netp
 | **AI + Proxmox Host** | Minisforum MS-S1 MAX (AMD Ryzen AI Max+ 395, 128GB LPDDR5X, 2TB NVMe) | ~$2,920 | [Newegg](https://www.newegg.com/minisforum-barebone-systems-mini-pc-deskmini/p/2SW-002G-000W4). Ships with Windows — wipe and install Proxmox. |
 | **Home Automation Hub** | Raspberry Pi 4 Model B (4GB RAM) | ~$55–75 | Already owned. |
 | **Camera AI Accelerator** | Google Coral USB Accelerator | ~$60–80 | [coral.ai](https://coral.ai/products/accelerator). Used by Frigate for real-time object detection. |
-| **Media Storage** | WD Elements 8TB USB 3.0 External Drive | ~$120 | Or NAS (see below). |
 | **MicroSD (Pi)** | Samsung Endurance 64GB | ~$15 | For Home Assistant OS. |
 | **Ethernet cables** | Cat6 (2×) | ~$15 | MS-S1 MAX and Pi wired to router for reliability. |
-
-### Optional: NAS Instead of USB Drive
-
-| Item | Model | Price | Notes |
-|------|-------|-------|-------|
-| **NAS** | Synology DS223 | ~$300 | 2-bay, RAID 1. Accessible to all devices. |
-| **NAS Drives** | Seagate IronWolf 4TB ×2 | ~$180 | 8TB usable with RAID 1. |
 
 ## Phase 1 Cost Summary
 
 | Config | Cost |
 |--------|------|
-| Phase 1 (USB drive for media) | ~$3,170 |
-| Phase 1 (NAS for media) | ~$3,550 |
+| Phase 1 | ~$3,070 |
 
 ## Phase 2 Additional Hardware
 
@@ -258,27 +246,34 @@ VMs and LXC containers inside Proxmox get their IPs set statically in their netp
 
 | Config | Incremental Cost | Total |
 |--------|-----------------|-------|
-| + M4 Ultra Mac Studio (192GB) | ~$4,200 | ~$7,400 |
-| + M5 Ultra Mac Studio (256GB) | ~$4,500–5,000 | ~$7,700–8,200 |
+| + M4 Ultra Mac Studio (192GB) | ~$4,200 | ~$7,300 |
+| + M5 Ultra Mac Studio (256GB) | ~$4,500–5,000 | ~$7,600–8,100 |
+
+## Phase 4 Additional Hardware (Media Server — Optional)
+
+| Item | Model | Price | Notes |
+|------|-------|-------|-------|
+| **Media Storage** | WD Elements 8TB USB 3.0 External Drive | ~$120 | Or NAS. |
+| **NAS (optional)** | Synology DS223 + 2× Seagate IronWolf 4TB | ~$480 | 2-bay RAID 1, 8TB usable. |
 
 ## Software (All Free Unless Noted)
 
 | Software | Where | Cost |
 |----------|-------|------|
 | Proxmox VE | MS-S1 MAX bare metal | Free |
-| Ubuntu 22.04 LTS | VMs on Proxmox | Free |
+| Ubuntu 22.04 LTS | NemoClaw VM | Free |
 | NemoClaw | NemoClaw VM | Free |
 | OpenClaw | Inside NemoClaw sandbox | Subscription |
 | Ollama | Ollama LXC + Mac Studio (Phase 2) | Free |
-| Plex or Jellyfin | Media Server VM | Free (Jellyfin) / Freemium (Plex) |
 | Home Assistant OS | Raspberry Pi | Free |
 | Nabu Casa | Cloud | $6.50/mo |
 | Tailscale | MS-S1 MAX + Phone | Free (personal) |
 | Docker CE | NemoClaw VM (for coding agents) | Free |
+| Plex or Jellyfin | Media Server LXC (Phase 4) | Free (Jellyfin) / Freemium (Plex) |
 
 ---
 
-# Part 4: Phase 1 — Single Machine Implementation
+# Part 4: Phase 1 — Core AI Stack
 
 ## 4.1 MS-S1 MAX: OS & Proxmox
 
@@ -342,31 +337,29 @@ dpkg-reconfigure --priority=low unattended-upgrades
 
 ## 4.2 VM Design
 
-Two VMs and one LXC container run on the MS-S1 MAX. Resource allocation from 128GB total:
+One VM and one LXC container make up the Phase 1 AI stack. Resource allocation from 128GB total:
 
 | Component | vCPU | RAM | Disk | Network | Purpose |
 |-----------|------|-----|------|---------|---------|
 | NemoClaw VM | 4 | 16GB | 80GB | vmbr0 (LAN) | OpenClaw + NemoClaw sandbox + coding agents |
-| Media Server VM | 4 | 8GB | 100GB | vmbr0 (LAN) | Plex/Jellyfin |
 | Ollama LXC | 4 | 8GB* | 32GB | vmbr0 (LAN) | Model inference |
 | **Proxmox host** | — | ~8GB | — | — | OS overhead |
-| **Available for model weights** | — | ~88GB | — | — | Unified memory pool for Ollama |
+| **Available for model weights** | — | ~96GB | — | — | Unified memory pool for Ollama |
 
 > \* The Ollama LXC's declared 8GB RAM covers process overhead only. Model weights load
 > into the AMD Radeon 890M's unified memory pool via the bind-mounted DRI device — this is
-> separate from the container's declared RAM budget. With VMs and host consuming ~40GB,
-> approximately 88GB of the 128GB unified pool is available for models.
+> separate from the container's declared RAM budget. With the VM and host consuming ~32GB,
+> approximately 96GB of the 128GB unified pool is available for models.
 
-> **Why no Agent Swarm VM?** OpenClaw natively orchestrates coding agents (Claude Code, Codex)
-> inside the NemoClaw sandbox via its built-in ACP harness. A separate agent VM would duplicate
-> this capability while adding complexity and consuming 32GB of RAM that's better used for
-> larger models.
+> **Why no separate agent VM?** OpenClaw natively orchestrates coding agents (Claude Code,
+> Codex) inside the NemoClaw sandbox via its built-in ACP harness. A separate agent VM
+> would duplicate this capability while adding complexity and consuming RAM better used
+> for larger models.
 
-### Create Each VM
+### Create the NemoClaw VM
 
-In Proxmox UI: **Create VM** — use these settings per VM:
+In Proxmox UI: **Create VM**
 
-**NemoClaw VM:**
 ```
 VM ID: 100  |  Name: nemoclaw
 OS:    Ubuntu 22.04 LTS Server ISO
@@ -376,38 +369,15 @@ RAM:   16384 MB
 Net:   vmbr0, VirtIO
 ```
 
-**Media Server VM:**
-```
-VM ID: 101  |  Name: media-server
-Disk:  100GB VirtIO SCSI
-CPU:   4 cores, type: host
-RAM:   8192 MB
-Net:   vmbr0, VirtIO
-```
-
-For each VM, install Ubuntu 22.04 and set a static IP:
+Install Ubuntu 22.04 and set a static IP:
 
 ```yaml
-# /etc/netplan/00-installer-config.yaml (NemoClaw VM)
+# /etc/netplan/00-installer-config.yaml
 network:
   version: 2
   ethernets:
     ens18:
       addresses: [192.168.1.21/24]
-      routes:
-        - to: default
-          via: 192.168.1.1
-      nameservers:
-        addresses: [8.8.8.8]
-```
-
-```yaml
-# /etc/netplan/00-installer-config.yaml (Media Server VM)
-network:
-  version: 2
-  ethernets:
-    ens18:
-      addresses: [192.168.1.22/24]
       routes:
         - to: default
           via: 192.168.1.1
@@ -508,12 +478,11 @@ nemoclaw my-assistant connect      # Shell into sandbox
 ## 4.4 Ollama + Local Models
 
 > **Architecture note:** Running Ollama directly on the Proxmox host is an anti-pattern.
-> If Ollama crashes due to a memory leak or a bad model, it can freeze the entire hypervisor —
-> taking down your HA, media server, and NemoClaw VMs with it.
+> If Ollama crashes due to a memory leak or a bad model, it can freeze the entire hypervisor.
 >
 > **The fix:** Run Ollama inside a **Proxmox LXC container** with the GPU device bind-mounted
 > in. Ollama gets native Radeon 890M access, but a crash stays contained to the LXC —
-> Proxmox and your other VMs are unaffected.
+> Proxmox and the NemoClaw VM are unaffected.
 
 ### Step 1: Create the Ollama LXC Container
 
@@ -661,7 +630,7 @@ Coding agents continue to use port 11434 (main Ollama instance).
 | `qwen2.5:7b` | HA dedicated | 11435 | ~5GB | ~50–70 tok/s |
 | `phi3:mini` | HA dedicated | 11435 | ~2GB | ~100+ tok/s |
 
-Total model footprint: ~29GB of the ~88GB available in the unified memory pool.
+Total model footprint: ~29GB of the ~96GB available in the unified memory pool.
 
 ### Restrict LAN Access to Ollama LXC
 
@@ -741,84 +710,7 @@ openshell policy add --sandbox my-assistant \
 
 ---
 
-## 4.6 Media Server
-
-Plex and Jellyfin both support AMD hardware transcoding via VAAPI on Linux.
-
-### GPU Access for Hardware Transcoding
-
-The AMD Radeon 890M is already bind-mounted into the Ollama LXC. Full PCIe passthrough
-to a VM gives that VM **exclusive** GPU ownership — it disappears from the host and LXC
-entirely, breaking Ollama inference. There is no shared-passthrough option for QEMU VMs
-on this GPU.
-
-**Recommended: Convert Media Server to an LXC container.**
-
-LXC containers share the host kernel and support the same `/dev/dri` bind-mount used by
-the Ollama LXC. Both containers can use the GPU simultaneously for their respective tasks
-(inference and transcoding). Jellyfin runs perfectly in an LXC with lower overhead than
-a full VM.
-
-To convert: in Proxmox, delete the Media Server VM and create a new LXC container
-(Ubuntu 22.04, same IP/resources). Then add the same GPU bind-mount lines to its config:
-
-```bash
-nano /etc/pve/lxc/201.conf
-```
-
-```
-# GPU device access for VAAPI transcoding (same as Ollama LXC)
-lxc.cgroup2.devices.allow: c 226:0 rwm
-lxc.cgroup2.devices.allow: c 226:128 rwm
-lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
-lxc.mount.entry: /dev/dri/card0 dev/dri/card0 none bind,optional,create=file
-lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
-```
-
-> **Keeping it as a VM?** You can still run Jellyfin in the VM — it will use software
-> transcoding instead of hardware acceleration. For personal use with a few streams,
-> software transcoding on 4 vCPUs is generally fine. Hardware transcoding only becomes
-> necessary when handling many simultaneous streams or heavy 4K remuxing.
-
-### Install Jellyfin (Free, Recommended)
-
-```bash
-ssh ubuntu@192.168.1.22
-
-# Add Jellyfin repo
-curl -fsSL https://repo.jellyfin.org/install-debuntu.sh | sudo bash
-
-sudo systemctl enable jellyfin
-sudo systemctl start jellyfin
-```
-
-Access Jellyfin: `http://192.168.1.22:8096`
-
-### Connect Media Storage
-
-```bash
-# USB external drive
-sudo mkdir -p /media/library
-sudo mount /dev/sdb1 /media/library
-
-# Make permanent
-echo '/dev/sdb1 /media/library ext4 defaults 0 2' | sudo tee -a /etc/fstab
-```
-
-In Jellyfin: Add Library → point at `/media/library/Movies`, `/media/library/TV`, etc.
-
-### Enable Hardware Transcoding in Jellyfin
-
-```
-Dashboard → Playback → Transcoding
-Hardware acceleration: Video Acceleration API (VAAPI)
-VAAPI Device: /dev/dri/renderD128
-Enable all codec checkboxes
-```
-
----
-
-## 4.7 Home Assistant (Raspberry Pi)
+## 4.6 Home Assistant (Raspberry Pi)
 
 ### Flash Home Assistant OS
 
@@ -918,7 +810,7 @@ action:
 
 ---
 
-## 4.8 Remote Access
+## 4.7 Remote Access
 
 Everything in this setup uses **outbound-only connections**. Your Google Nest never needs
 a port forwarded. From the internet's perspective, your home is a black box.
@@ -930,15 +822,10 @@ a port forwarded. From the internet's perspective, your home is a black box.
 | WhatsApp AI (OpenClaw) | OpenClaw cloud relay — outbound WebSocket | None |
 | Home Assistant | Nabu Casa — outbound tunnel | None |
 | Ollama (local LLM) | Tailscale VPN — outbound WireGuard | None |
-| Jellyfin (media) | Tailscale or Jellyfin Connect | None |
 
 ---
 
 ### Tailscale: Access Your Local LLM from Anywhere
-
-Tailscale creates an encrypted WireGuard tunnel between your devices.
-Your phone can reach Ollama on your home machine as if it were sitting next to it —
-over cellular, at a coffee shop, anywhere.
 
 **Step 1: Create a Tailscale account**
 
@@ -965,8 +852,6 @@ tailscale ip -4
 - **iPhone:** App Store → Tailscale → Install → Sign in with same account
 - **Android:** Play Store → Tailscale → Install → Sign in with same account
 
-Both devices will appear in your Tailscale admin console at [login.tailscale.com](https://login.tailscale.com).
-
 **Step 4: Test the connection**
 
 With Tailscale active on your phone (on cellular, not home WiFi):
@@ -978,7 +863,7 @@ Should return JSON list of your Ollama models
 
 ---
 
-### Chat with Your Local LLM from iPhone
+### Chat with Your Local LLM from Your Phone
 
 **Enchanted (recommended — native iOS app)**
 
@@ -989,10 +874,9 @@ Should return JSON list of your Ollama models
 
 **Open WebUI (browser-based — works on iPhone and Android)**
 
-Deploy on your Media Server VM:
+Run on the Proxmox host or NemoClaw VM:
 
 ```bash
-ssh ubuntu@192.168.1.22
 docker run -d \
   -p 8080:8080 \
   -e OLLAMA_BASE_URL=http://192.168.1.25:11434 \
@@ -1025,27 +909,22 @@ In Tailscale admin console → **Access Controls**:
 }
 ```
 
-Tag your devices in the Tailscale admin console:
-- MS-S1 MAX → `tag:homeserver`
-- Your phone → `tag:phone`
+Tag your devices: MS-S1 MAX → `tag:homeserver`, your phone → `tag:phone`.
 
 ---
 
 ### Phase 2: Tailscale on Mac Studio
-
-When the Mac Studio is added, install Tailscale there too:
 
 ```bash
 brew install --cask tailscale
 # Open Tailscale menu bar → Log in with same account
 ```
 
-Point Enchanted or Open WebUI at the Mac Studio's Tailscale IP for access to 70B+ models
-from your phone — still fully private, still no port forwarding.
+Point Enchanted or Open WebUI at the Mac Studio's Tailscale IP for access to 70B+ models.
 
 ---
 
-## 4.9 Security
+## 4.8 Security
 
 ### Network Security Checklist
 
@@ -1174,18 +1053,10 @@ sudo pfctl -f /etc/pf.conf
 ### Pull Models
 
 ```bash
-# Primary coding model
 ollama pull qwen2.5-coder:72b
-
-# General reasoning / orchestration
 ollama pull llama3.1:70b
-
-# Deep reasoning / complex architecture
 ollama pull deepseek-r1:70b
-
-# Home Assistant (fast)
 ollama pull qwen2.5:7b
-
 ollama list
 ```
 
@@ -1200,7 +1071,7 @@ brew install --cask tailscale
 
 ## 5.3 Switch Inference
 
-One config change per VM. No restarts beyond the config reload.
+One config change. No restarts beyond the config reload.
 
 ### NemoClaw VM
 
@@ -1270,8 +1141,6 @@ Model: qwen2.5:7b
 | deepseek-r1:70b | 70B | 45GB | 40–60 tok/s | Complex reasoning |
 | nemotron-ultra:253b | 253B | ~160GB | 20–35 tok/s | Maximum capability |
 
-With 256GB you can run 2–3 large models simultaneously for true parallel agent swarms.
-
 ### Context Window in Phase 2
 
 | Model | Default context | Comfortable max | KV cache at max |
@@ -1328,8 +1197,6 @@ DHCP: Enabled
 ### Assign Devices to VLANs
 
 ```
-UniFi Dashboard → Devices → [device] → Port → Network
-
 Mac Studio  → VLAN 20 (Inference)
 MS-S1 MAX   → VLAN 1 (Trusted)
 Pi          → VLAN 1 (Trusted)
@@ -1339,8 +1206,6 @@ IoT devices → VLAN 30
 ### Firewall Rules
 
 ```
-UniFi Dashboard → Firewall & Security → Rules
-
 Rule 1: Allow VLAN 1 → VLAN 20, port 11434 (Ollama on Mac Studio)
 Rule 2: Block VLAN 20 → internet (Mac Studio never touches WAN)
 Rule 3: Block VLAN 20 → VLAN 1 (inference can't initiate connections back)
@@ -1354,7 +1219,6 @@ Rule 5: Allow VLAN 1 → VLAN 30, port 80/443 (you can manage IoT devices)
 |--------|-----------|-----------|------|
 | MS-S1 MAX (Proxmox host) | 192.168.1.20 | 192.168.1.20 | 1 (unchanged) |
 | NemoClaw VM | 192.168.1.21 | 192.168.1.21 | 1 (unchanged) |
-| Media Server VM | 192.168.1.22 | 192.168.1.22 | 1 (unchanged) |
 | Ollama LXC | 192.168.1.25 | 192.168.1.25 | 1 (unchanged) |
 | Raspberry Pi | 192.168.1.30 | 192.168.1.30 | 1 (unchanged) |
 | Mac Studio | 192.168.1.10 | **192.168.2.10** | **20 (Inference)** |
@@ -1362,7 +1226,6 @@ Rule 5: Allow VLAN 1 → VLAN 30, port 80/443 (you can manage IoT devices)
 Update the config reference to Mac Studio's new IP:
 
 ```bash
-# NemoClaw sandbox:
 nemoclaw my-assistant connect
 sandbox$ nano ~/.openclaw/openclaw.json
 # Update ollama baseUrl to http://192.168.2.10:11434
@@ -1390,6 +1253,114 @@ Host: http://192.168.2.10:11434
 | IoT device isolation | None | VLAN 30, fully isolated |
 | Traffic visibility | None | UniFi dashboard, per-device |
 | Defense if macOS pf misconfigured | Unprotected | Router still blocks it |
+
+---
+
+# Part 5.6: Phase 4 — Media Server (Optional)
+
+> **This is optional and independent.** Add it any time — before or after Phase 2 or 3.
+> It has no effect on the AI stack.
+
+A Jellyfin or Plex media server lets you stream your video and music library to any device
+on your network or remotely. Running it as an LXC container on the MS-S1 MAX keeps it
+off your main machines while sharing the same hardware.
+
+## Why LXC (Not a VM)
+
+The AMD Radeon 890M is already bind-mounted into the Ollama LXC for inference. Full PCIe
+passthrough to a VM gives exclusive GPU ownership — it would break Ollama. LXC containers
+share the host kernel and support the same `/dev/dri` bind-mount, so both the Ollama LXC
+and the Media Server LXC can use the GPU simultaneously without conflict.
+
+## Create the Media Server LXC
+
+In Proxmox UI: **Create CT**
+
+```
+CT ID:      201
+Hostname:   media-server
+Template:   Ubuntu 22.04
+Disk:       32GB
+CPU:        4 cores
+RAM:        4096 MB
+Network:    vmbr0, IP 192.168.1.22/24, Gateway 192.168.1.1
+Unprivileged: YES
+```
+
+After creating (do NOT start yet):
+
+```bash
+nano /etc/pve/lxc/201.conf
+```
+
+Add GPU bind-mount for hardware transcoding:
+
+```
+# GPU device access for VAAPI transcoding
+lxc.cgroup2.devices.allow: c 226:0 rwm
+lxc.cgroup2.devices.allow: c 226:128 rwm
+lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
+lxc.mount.entry: /dev/dri/card0 dev/dri/card0 none bind,optional,create=file
+lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
+```
+
+```bash
+pct start 201
+pct enter 201
+```
+
+## Install Jellyfin
+
+```bash
+# Inside the Media Server LXC
+curl -fsSL https://repo.jellyfin.org/install-debuntu.sh | sudo bash
+sudo systemctl enable jellyfin
+sudo systemctl start jellyfin
+```
+
+Access Jellyfin: `http://192.168.1.22:8096`
+
+## Connect Media Storage
+
+```bash
+# USB external drive (mounted from Proxmox host via bind-mount)
+# On Proxmox host, add to /etc/pve/lxc/201.conf:
+# mp0: /mnt/media,mp=/media/library
+
+# Or mount inside the LXC directly:
+sudo mkdir -p /media/library
+sudo mount /dev/sdb1 /media/library
+echo '/dev/sdb1 /media/library ext4 defaults 0 2' | sudo tee -a /etc/fstab
+```
+
+In Jellyfin: Add Library → point at `/media/library/Movies`, `/media/library/TV`, etc.
+
+## Enable Hardware Transcoding in Jellyfin
+
+```
+Dashboard → Playback → Transcoding
+Hardware acceleration: Video Acceleration API (VAAPI)
+VAAPI Device: /dev/dri/renderD128
+Enable all codec checkboxes
+```
+
+## Remote Access (Optional)
+
+Add Jellyfin to your Tailscale ACL to stream remotely without port forwarding:
+
+```json
+{
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:phone"],
+      "dst": ["tag:homeserver:8096"]
+    }
+  ]
+}
+```
+
+Access from your phone on cellular: `http://100.64.0.1:8096`
 
 ---
 
@@ -1428,7 +1399,7 @@ Every token generated requires reading the entire model's weights from memory.
 
 ## Concurrent Models: What Fits Simultaneously
 
-### Phase 1 — MS-S1 MAX (128GB, ~88GB available for models)
+### Phase 1 — MS-S1 MAX (128GB, ~96GB available for models)
 
 | Scenario | Models loaded | RAM used | Concurrent agents | Notes |
 |----------|--------------|----------|------------------|-------|
@@ -1484,7 +1455,6 @@ curl http://192.168.1.25:11435/api/tags
 
 # From Raspberry Pi — HA can reach Ollama HA instance
 curl http://192.168.1.25:11435/api/tags
-# Expected: same JSON
 
 # Ollama NOT reachable from internet (test on cellular)
 curl --connect-timeout 5 http://YOUR_PUBLIC_IP:11434/api/tags
@@ -1552,10 +1522,8 @@ systemctl status ollama-ha
 ssh root@192.168.1.20
 apt update && apt full-upgrade -y
 
-# Update all VMs
-for ip in 192.168.1.21 192.168.1.22; do
-  ssh ubuntu@$ip "sudo apt update && sudo apt upgrade -y"
-done
+# Update NemoClaw VM
+ssh ubuntu@192.168.1.21 "sudo apt update && sudo apt upgrade -y"
 
 # Update Ollama LXC
 pct enter 200
@@ -1572,11 +1540,13 @@ apt update && apt upgrade -y
 Datacenter → Backup → Add
 Schedule: Sunday 02:00
 Storage: local
-VMs: 100 (nemoclaw), 101 (media-server)
+VMs: 100 (nemoclaw)
 LXC: 200 (ollama)
 Mode: Snapshot
 Compression: ZSTD
 ```
+
+> If Phase 4 (Media Server LXC) is deployed, add CT 201 to the backup job.
 
 ## Phase 2: Mac Studio Model Updates
 
@@ -1597,13 +1567,13 @@ done
 > | Google Nest Router | 192.168.1.1 | replaced by UniFi | — |
 > | MS-S1 MAX (Proxmox host) | 192.168.1.20 | 192.168.1.20 | VLAN 1 |
 > | NemoClaw VM | 192.168.1.21 | 192.168.1.21 | VLAN 1 |
-> | Media Server VM | 192.168.1.22 | 192.168.1.22 | VLAN 1 |
 > | Ollama LXC | 192.168.1.25 | 192.168.1.25 | VLAN 1 |
 > | Raspberry Pi (HA) | 192.168.1.30 | 192.168.1.30 | VLAN 1 |
 > | Mac Studio (Phase 2) | 192.168.1.10 | 192.168.2.10 | VLAN 20 (Inference) |
+> | Media Server LXC (Phase 4) | 192.168.1.22 | 192.168.1.22 | VLAN 1 |
 
 ---
 
-*Architecture version: 2.1 — Removed Agent Swarm VM (OpenClaw handles agent orchestration natively). Fixed GPU sharing. Added context window configuration. Cleaned Phase 3 tables.*
+*Architecture version: 2.2 — Media Server moved to Phase 4 (optional). Phase 1 is now a lean two-component AI stack (NemoClaw VM + Ollama LXC). GPU is fully dedicated to Ollama in Phase 1 with no sharing concerns.*
 *Hardware: Minisforum MS-S1 MAX + Raspberry Pi 4 + (Phase 2) Apple Mac Studio M5 Ultra*
 *Networking: Google Nest compatible — no VLANs, no managed switch required in Phase 1/2*
