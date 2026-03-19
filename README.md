@@ -1379,26 +1379,100 @@ autonomous agents with internet access and sensitive personal data.
 
 # Part 6: Performance Comparison
 
-## Tokens Per Second
+## Why Performance Differs: The Memory Bandwidth Constraint
 
-| Task | Phase 1 | Phase 2 | Delta |
-|------|---------|---------|-------|
-| Orchestration (main agent) | 50–80 tok/s (cloud) | 55–75 tok/s (local 70B) | Similar speed, private |
-| Coding agent | 15–25 tok/s (32B local) | 45–65 tok/s (72B local) | **2–4× faster and smarter** |
-| HA automations | 50–70 tok/s (7B local) | 200+ tok/s (7B on M5 Ultra) | **3–4× faster** |
-| Parallel agents | 1–2 before queuing | 4–8 simultaneous | **Swarm scale** |
+Token generation speed is limited by **memory bandwidth**, not compute.
+Every token generated requires reading the entire model's weights from memory.
+The faster your memory bandwidth, the faster tokens come out.
+
+| Hardware | Memory | Bandwidth | Implication |
+|----------|--------|-----------|-------------|
+| MS-S1 MAX (Radeon 890M) | 128GB LPDDR5X | ~270 GB/s | Good for smaller models, limited parallelism |
+| Mac Studio M5 Ultra | 256GB unified | ~800 GB/s | ~3× faster per token, handles multiple large models |
+
+This is why the Mac Studio isn't just "more storage" — it's fundamentally faster at
+inference because Apple Silicon's memory bandwidth is in a different class.
+
+---
+
+## Tokens Per Second by Task
+
+| Task | Model | Phase 1 | Phase 2 | Feel |
+|------|-------|---------|---------|------|
+| Orchestration | Nemotron 120B (cloud) | 50–80 tok/s | — | Fast |
+| Orchestration | Llama 3.1 70B (local) | 8–12 tok/s | 55–75 tok/s | Phase 1: slow; Phase 2: fast |
+| Coding agent | Qwen 2.5 Coder 32B | 15–25 tok/s | 90–120 tok/s | Phase 1: readable; Phase 2: fast |
+| Coding agent | Qwen 2.5 Coder 72B | 4–6 tok/s | 45–65 tok/s | Phase 1: painful; Phase 2: good |
+| HA automations | Qwen 2.5 7B | 50–70 tok/s | 200+ tok/s | Both fine; Phase 2 near-instant |
+| Simple tasks | phi3:mini (3.8B) | 150+ tok/s | 300+ tok/s | Both fast |
+
+> **What do these speeds feel like?**
+> - 5–10 tok/s → watching words appear slowly, like dial-up
+> - 15–25 tok/s → readable, like fast typing speed
+> - 50–80 tok/s → feels instant for short responses
+> - 100+ tok/s → effectively instant for everything
+
+---
+
+## Concurrent Models: What Fits Simultaneously
+
+### Phase 1 — MS-S1 MAX (128GB)
+
+Ollama keeps loaded models in memory until evicted. Multiple models can be loaded at once
+if they fit. The constraint is total memory and bandwidth contention under parallel load.
+
+| Scenario | Models loaded | RAM used | Concurrent agents | Notes |
+|----------|--------------|----------|------------------|-------|
+| Minimal | phi3:mini only | ~4GB | 2–3 | Fast but low quality |
+| Typical | qwen2.5-coder:32b + qwen2.5:7b | ~27GB | 1–2 | Good balance |
+| Heavy | qwen2.5-coder:32b + llama3.1:70b | ~67GB | 1 each | Both loaded, queued requests |
+| Max | All three models loaded | ~29GB | 1–2 | Bandwidth splits under concurrency |
+
+**The concurrency ceiling in Phase 1:** When 2+ agents request inference simultaneously,
+they share the Radeon 890M's 270 GB/s bandwidth. Each agent's throughput drops proportionally.
+Two agents running Qwen 32B = ~8–12 tok/s each instead of 15–25 tok/s.
+
+### Phase 2 — Mac Studio M5 Ultra (256GB)
+
+| Scenario | Models loaded | RAM used | Concurrent agents | Notes |
+|----------|--------------|----------|------------------|-------|
+| Standard | qwen2.5-coder:72b + llama3.1:70b + qwen2.5:7b | ~97GB | 4–5 | Comfortable |
+| Full swarm | 4× qwen2.5-coder:32b instances | ~82GB | 4 simultaneous | Each at full speed |
+| Maximum | nemotron-ultra:253b alone | ~160GB | 1–2 | Largest available model |
+| Parallel large | qwen2.5-coder:72b + deepseek-r1:70b | ~93GB | 3–4 each | Complex tasks in parallel |
+
+**The concurrency unlock in Phase 2:** 800 GB/s bandwidth means 4 simultaneous large-model
+agents barely dent throughput. Each agent runs at near-full speed independently.
+
+---
 
 ## Coding & Agentic Workflow Quality
 
 | Capability | Phase 1 | Phase 2 |
 |-----------|---------|---------|
-| Single file edits | Excellent | Excellent |
+| Single file edits | Excellent (32B) | Excellent (72B) |
 | Multi-file refactoring | Good | Excellent |
-| System architecture decisions | Adequate (32B limit) | Strong (70B reasoning) |
-| Long context (200K+ tokens) | Degraded at 32B | Solid at 70B+ |
-| Parallel agent swarms | 1–2 agents | 4–8 agents |
-| Privacy | Main agent uses cloud | 100% on-premises |
+| Architecture decisions | Adequate | Strong (70B reasoning) |
+| Long context (200K+ tokens) | Degrades at 32B | Solid at 70B+ |
+| Parallel coding agents | 1–2 (then queued) | 4–8 simultaneous full speed |
+| Largest model available | 32B practical | 253B |
+| Privacy | Main agent uses cloud | 100% local |
 | Rate limits | NVIDIA free tier | None |
+
+## Real-World Scenario: Coding Agent Swarm
+
+**Phase 1 — 2 agents working in parallel on different files:**
+- Agent 1: qwen2.5-coder:32b → ~12 tok/s (bandwidth shared)
+- Agent 2: qwen2.5-coder:32b → ~12 tok/s (bandwidth shared)
+- A 500-token code block takes ~40 seconds per agent
+- Works, but you feel the wait
+
+**Phase 2 — 4 agents working in parallel:**
+- Agents 1–4: qwen2.5-coder:72b → ~45–50 tok/s each (minimal contention)
+- A 500-token code block takes ~10 seconds per agent
+- Smarter model + 4× the agents + faster throughput = genuinely different experience
+
+---
 
 ## Is Phase 2 Worth It?
 
@@ -1407,14 +1481,15 @@ autonomous agents with internet access and sensitive personal data.
 - Work on complex multi-file or multi-repo codebases
 - Want 100% private inference (nothing to cloud)
 - Hit NVIDIA rate limits on heavy agentic workflows
+- Want to run 70B+ models locally at usable speed
 
 **Not yet, if you:**
 - Use this primarily as a personal assistant
 - Run single coding agent tasks occasionally
-- Are satisfied with Phase 1 performance
+- Are satisfied with the Nemotron 120B cloud model for orchestration
 
-**Recommendation:** Live in Phase 1 for 2–3 months. If you find yourself waiting on inference
-or hitting rate limits, that's the signal to add the Mac Studio.
+**Recommendation:** Live in Phase 1 for 2–3 months.
+If you find yourself waiting on inference or wanting more parallel agents, that's your signal.
 
 ---
 
