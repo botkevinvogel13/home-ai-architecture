@@ -1,7 +1,7 @@
 # Home AI Infrastructure Architecture
 ### A Private, Powerful, Always-On AI Stack — Built in Your Home
 
-> **Version:** 2.3 | **Status:** Active  
+> **Version:** 3.0 | **Status:** Active  
 > **Hardware:** Minisforum MS-S1 MAX · (Phase 2: Apple Mac Studio)
 
 ---
@@ -14,11 +14,13 @@
 - [Part 4: Phase 1 — Core AI Stack](#part-4-phase-1--core-ai-stack)
   - [4.1 MS-S1 MAX: OS & Proxmox](#41-ms-s1-max-os--proxmox)
   - [4.2 Component Design](#42-component-design)
-  - [4.3 NemoClaw + OpenClaw](#43-nemoclaw--openclaw)
-  - [4.4 Ollama + Local Models](#44-ollama--local-models)
-  - [4.5 Multi-Agent Configuration](#45-multi-agent-configuration)
-  - [4.6 Remote Access](#46-remote-access)
-  - [4.7 Security](#47-security)
+  - [4.3 Create the NemoClaw VM](#43-create-the-nemoclaw-vm)
+  - [4.4 Ubuntu Setup Inside the VM](#44-ubuntu-setup-inside-the-vm)
+  - [4.5 NemoClaw + OpenClaw](#45-nemoclaw--openclaw)
+  - [4.6 Ollama + Local Models](#46-ollama--local-models)
+  - [4.7 Multi-Agent Configuration](#47-multi-agent-configuration)
+  - [4.8 Remote Access](#48-remote-access)
+  - [4.9 Security Checklist](#49-security-checklist)
 - [Part 5: Phase 2 — Mac Studio Added](#part-5-phase-2--mac-studio-added)
 - [Part 5.5: Phase 3 — Network-Level Security Hardening](#part-55-phase-3--network-level-security-hardening)
 - [Part 5.6: Phase 4 — Home Assistant (Optional)](#part-56-phase-4--home-assistant-optional)
@@ -76,7 +78,7 @@ running on hardware you own, with your data never leaving your home.
 
 | Requirement | Approach |
 |-------------|---------|
-| **Privacy** | All AI inference runs locally. Cloud relay (OpenClaw gateway, Nabu Casa) are dumb pipes — they move bytes, never process content |
+| **Privacy** | All AI inference runs locally. Cloud relay (OpenClaw gateway) are dumb pipes — they move bytes, never process content |
 | **Security** | NemoClaw OpenShell sandbox isolates the AI agent. No public inbound ports. |
 | **Always-on** | Proxmox auto-starts VMs/LXC on boot. Systemd services restart on failure. |
 | **Router compatibility** | Designed for standard home routers including Google Nest. No VLANs required in Phase 1/2. |
@@ -184,10 +186,15 @@ Google Nest Router (192.168.1.1)
 
 ### Static IP Assignments
 
-| Device | IP | How to set |
-|--------|----|-----------|
-| MS-S1 MAX (Proxmox) | 192.168.1.20 | Nest app → Devices → Reserve IP |
-| Mac Studio (Phase 2) | 192.168.1.10 | Nest app → Devices → Reserve IP |
+Reserve these IPs in your Google Nest app before starting:
+**Nest app → Devices → [device] → Reserve IP**
+
+| Device | IP | Notes |
+|--------|----|-------|
+| MS-S1 MAX (Proxmox) | 192.168.1.20 | Reserve after first boot |
+| Mac Studio (Phase 2) | 192.168.1.10 | Reserve when Phase 2 begins |
+
+The NemoClaw VM and Ollama LXC get their static IPs set via config files directly — no router reservation needed for them.
 
 ---
 
@@ -197,37 +204,31 @@ Google Nest Router (192.168.1.1)
 
 | Item | Model | Price | Notes |
 |------|-------|-------|-------|
-| **AI + Proxmox Host** | Minisforum MS-S1 MAX (AMD Ryzen AI Max+ 395, 128GB LPDDR5X, 2TB NVMe) | ~$2,920 | [Newegg](https://www.newegg.com/minisforum-barebone-systems-mini-pc-deskmini/p/2SW-002G-000W4). Ships with Windows — wipe and install Proxmox. |
-| **Ethernet cable** | Cat6 | ~$10 | Wired connection to router required. |
+| **AI + Proxmox Host** | Minisforum MS-S1 MAX (AMD Ryzen AI Max+ 395, 128GB LPDDR5X, 2TB NVMe) | ~$2,920 | Ships with Windows — wipe and install Proxmox |
+| **Ethernet cable** | Cat6 | ~$10 | Wired connection to router required |
+| **USB drive (8GB+)** | Any brand | ~$10 | For Proxmox installer |
 
-**Phase 1 Total: ~$2,930**
+**Phase 1 Total: ~$2,940**
 
 ## Phase 2 Additional Hardware
 
 | Item | Model | Price | Notes |
 |------|-------|-------|-------|
-| **LLM Inference Server** | Apple Mac Studio M5 Ultra (256GB unified memory) | ~$4,000–5,000 | M4 Ultra (192GB) available now at ~$4,199. |
+| **LLM Inference Server** | Apple Mac Studio M5 Ultra (256GB unified memory) | ~$4,000–5,000 | M4 Ultra (192GB) available now at ~$4,199 |
 | **Ethernet cable** | Cat6 | ~$10 | — |
-
-| Config | Incremental | Total |
-|--------|------------|-------|
-| + M4 Ultra Mac Studio | ~$4,200 | ~$7,130 |
-| + M5 Ultra Mac Studio | ~$4,500–5,000 | ~$7,430–7,930 |
 
 ## Phase 4 Additional Hardware (Home Assistant)
 
 | Item | Model | Price | Notes |
 |------|-------|-------|-------|
-| **AI Camera Accelerator** | Google Coral USB Accelerator | ~$60–80 | [coral.ai](https://coral.ai/products/accelerator). Passed through to the HA VM via Proxmox USB passthrough. |
-
-**No additional compute hardware needed** — HA runs as a VM on the existing MS-S1 MAX.
+| **AI Camera Accelerator** | Google Coral USB Accelerator | ~$60–80 | Passed through to HA VM via Proxmox USB passthrough |
 
 ## Phase 5 Additional Hardware (Media Server)
 
 | Item | Model | Price | Notes |
 |------|-------|-------|-------|
-| **Media Storage** | WD Elements 8TB USB 3.0 | ~$120 | Or NAS. |
-| **NAS (optional)** | Synology DS223 + 2× Seagate IronWolf 4TB | ~$480 | 8TB usable RAID 1. |
+| **Media Storage** | WD Elements 8TB USB 3.0 | ~$120 | Or NAS |
+| **NAS (optional)** | Synology DS223 + 2× Seagate IronWolf 4TB | ~$480 | 8TB usable RAID 1 |
 
 ## Software (All Free Unless Noted)
 
@@ -244,62 +245,141 @@ Google Nest Router (192.168.1.1)
 | Nabu Casa | Cloud (Phase 4) | $6.50/mo |
 | Jellyfin | Media Server LXC (Phase 5) | Free |
 
+## Accounts to Create Before You Start
+
+You'll need these before beginning installation. Create them now so you have the credentials ready:
+
+| Account | URL | Why |
+|---------|-----|-----|
+| **NVIDIA Build** | [build.nvidia.com](https://build.nvidia.com) | Free API key for Nemotron 120B (the main AI model) |
+| **OpenClaw** | [openclaw.ai](https://openclaw.ai) | Subscription for the AI agent platform |
+| **Tailscale** | [tailscale.com](https://tailscale.com) | Free VPN for remote access to local LLM |
+
 ---
 
 # Part 4: Phase 1 — Core AI Stack
 
 ## 4.1 MS-S1 MAX: OS & Proxmox
 
-### Before Wiping Windows
+### Step 1: Firmware Update (Do This First)
+
+Before wiping Windows, apply any BIOS/firmware updates. This is important — firmware
+updates often can't be applied after switching OS.
 
 ```
-1. Boot into Windows
-2. Go to minisforum.com → Support → MS-S1 MAX
-3. Download and apply any BIOS/firmware updates
-4. Restart, confirm update applied
-5. Now wipe and install Proxmox
+1. Boot into Windows (shipped state)
+2. Go to minisforum.com → Support → MS-S1 MAX → Downloads
+3. Download and run any BIOS or firmware update tools listed
+4. Restart, confirm update applied in BIOS (hold DEL during POST)
+5. Now proceed to wipe and install Proxmox
 ```
 
-### Install Proxmox VE
+### Step 2: Download Proxmox VE ISO
 
-1. Download Proxmox VE 8.2+ ISO from [proxmox.com](https://www.proxmox.com/en/downloads)
+On your laptop/desktop:
+
+1. Go to [proxmox.com/en/downloads](https://www.proxmox.com/en/downloads)
+2. Download **Proxmox VE 8.2** or newer
    *(Must be 8.2+ for full AMD Ryzen AI Max+ 395 kernel support)*
-2. Flash to USB with Balena Etcher
-3. Boot MS-S1 MAX from USB (hold **F7** during POST for boot menu)
-4. Install Proxmox:
+3. Verify the SHA256 checksum shown on the download page:
+   ```bash
+   # macOS
+   shasum -a 256 proxmox-ve_*.iso
+
+   # Windows (PowerShell)
+   Get-FileHash proxmox-ve_*.iso -Algorithm SHA256
+   ```
+
+### Step 3: Flash to USB
+
+1. Download [Balena Etcher](https://etcher.balena.io) (free, works on Mac/Windows/Linux)
+2. Open Etcher → Flash from file → select the Proxmox ISO
+3. Select your USB drive
+4. Click Flash
+5. When done, eject the USB
+
+### Step 4: Boot and Install Proxmox
+
+1. Plug the USB into the MS-S1 MAX
+2. Power on and immediately hold **F7** to get the boot menu
+   *(If F7 doesn't work, try DEL to enter BIOS and set USB as first boot device)*
+3. Select the USB drive from the boot menu
+4. At the Proxmox installer, choose **Install Proxmox VE (Graphical)**
+5. Accept the EULA
+6. Target disk: select the 2TB NVMe — click **Next**
+7. Location: set your country/timezone — click **Next**
+8. Set a strong root password and enter your email — click **Next**
+9. Network configuration:
 
 ```
-Hostname:  proxmox.local
-IP:        192.168.1.20/24
-Gateway:   192.168.1.1
-DNS:       8.8.8.8
+Management Interface: [your ethernet port — usually the first listed]
+Hostname (FQDN):      proxmox.local
+IP Address:           192.168.1.20/24
+Gateway:              192.168.1.1
+DNS Server:           8.8.8.8
 ```
 
-5. Access Proxmox web UI: `https://192.168.1.20:8006`
+10. Review the summary — click **Install**
+11. When installation completes, remove the USB and click **Reboot**
 
-### Post-Install Hardening
+### Step 5: Reserve the Static IP
+
+Before the machine reboots and comes up on the network:
+- Open the **Google Home app** → Wi-Fi → Devices → find the MS-S1 MAX → Reserve IP → set to `192.168.1.20`
+
+### Step 6: Access Proxmox Web UI
+
+On your laptop, open a browser and go to:
+```
+https://192.168.1.20:8006
+```
+
+You'll get a self-signed certificate warning — click through it. Log in with:
+```
+Username: root
+Password: [the password you set during install]
+```
+
+You'll see a "No valid subscription" popup — click OK. You don't need a subscription.
+
+### Step 7: Post-Install Hardening
+
+Open a terminal and SSH into the Proxmox host:
 
 ```bash
 ssh root@192.168.1.20
+```
 
+Run all of these:
+
+```bash
+# Update everything
 apt update && apt full-upgrade -y
 
-# Switch to free community repo
+# Switch to the free community repo (removes subscription nag on apt updates)
 rm /etc/apt/sources.list.d/pve-enterprise.list
 echo "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription" \
   > /etc/apt/sources.list.d/pve-community.list
 apt update
 
-# Firewall — Proxmox UI and SSH from LAN only
+# Firewall — restrict Proxmox UI and SSH to LAN only
 apt install -y ufw
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow from 192.168.1.0/24 to any port 22
 ufw allow from 192.168.1.0/24 to any port 8006
-ufw enable
+ufw --force enable
 
+# Auto security updates
 apt install -y unattended-upgrades
 dpkg-reconfigure --priority=low unattended-upgrades
+# Select "Yes" when prompted
+```
+
+Verify the firewall is active:
+```bash
+ufw status
+# Should show: Status: active, with rules for ports 22 and 8006
 ```
 
 ---
@@ -319,90 +399,401 @@ Phase 1 is two components on the MS-S1 MAX:
 > unified memory pool via bind-mounted DRI device — separate from the container's RAM budget.
 > With NemoClaw VM and host consuming ~32GB, approximately 96GB is available for models.
 
-### Create the NemoClaw VM
+---
 
-In Proxmox UI: **Create VM**
+## 4.3 Create the NemoClaw VM
 
+### Step 1: Download the Ubuntu ISO into Proxmox
+
+In the Proxmox web UI:
+
+1. In the left panel, click **local (proxmox)** → **ISO Images**
+2. Click **Download from URL**
+3. Paste this URL:
+   ```
+   https://releases.ubuntu.com/22.04/ubuntu-22.04.3-live-server-amd64.iso
+   ```
+4. Click **Query URL** — Proxmox will fill in the filename
+5. Click **Download** — wait for it to complete (about 1–2 minutes)
+
+Alternatively, if you prefer to verify the checksum manually first:
+```bash
+# On the Proxmox host SSH session:
+cd /var/lib/vz/template/iso/
+wget https://releases.ubuntu.com/22.04/ubuntu-22.04.3-live-server-amd64.iso
+# Verify checksum (find expected hash at releases.ubuntu.com/22.04/SHA256SUMS)
+sha256sum ubuntu-22.04.3-live-server-amd64.iso
 ```
-VM ID: 100  |  Name: nemoclaw
-OS:    Ubuntu 22.04 LTS Server ISO
-Disk:  80GB VirtIO SCSI
-CPU:   4 cores, type: host
-RAM:   16384 MB
-Net:   vmbr0, VirtIO
+
+### Step 2: Create the VM
+
+In the Proxmox web UI, click **Create VM** (top right):
+
+**General tab:**
+```
+Node:    proxmox
+VM ID:   100
+Name:    nemoclaw
 ```
 
-Set static IP:
+**OS tab:**
+```
+Storage:        local
+ISO image:      ubuntu-22.04.3-live-server-amd64.iso
+Type:           Linux
+Version:        6.x - 2.6 Kernel
+```
+
+**System tab:**
+```
+Graphic card:   Default
+Machine:        q35
+BIOS:           OVMF (UEFI)
+Add EFI Disk:   ✓ checked  →  Storage: local-lvm
+SCSI Controller: VirtIO SCSI Single
+Qemu Agent:     ✓ checked
+```
+
+**Disks tab:**
+```
+Bus/Device:   SCSI  |  scsi0
+Storage:      local-lvm
+Disk size:    80
+Cache:        Write back
+Discard:      ✓ checked  (enables TRIM for the SSD)
+```
+
+**CPU tab:**
+```
+Sockets:  1
+Cores:    4
+Type:     host    ← important: gives VM access to AMD AI instructions
+```
+
+**Memory tab:**
+```
+Memory (MiB):  16384
+Balloon:       ✓ checked  (allows unused RAM to be reclaimed by host)
+```
+
+**Network tab:**
+```
+Bridge:   vmbr0
+Model:    VirtIO (paravirtualized)
+Firewall: ✓ checked
+```
+
+Click **Finish**. The VM is created but not started yet.
+
+### Step 3: Start the VM and Open the Console
+
+1. In the left panel, click **100 (nemoclaw)**
+2. Click **Start** (top right)
+3. Click **Console** — a noVNC window opens showing the Ubuntu installer
+
+---
+
+## 4.4 Ubuntu Setup Inside the VM
+
+### Step 1: Ubuntu Installer
+
+The Ubuntu Server installer will walk you through these screens. Use arrow keys and Enter to navigate.
+
+**Language:** English → Enter
+
+**Keyboard:** Detect keyboard layout, or select yours manually → Done
+
+**Type of install:** Ubuntu Server *(not minimized)* → Done
+
+**Network connections:** You'll see `ens18` — leave it on DHCP for now. We'll set the static IP after install.
+→ Done
+
+**Configure proxy:** Leave blank → Done
+
+**Ubuntu archive mirror:** Leave default → Done → wait for it to test connectivity
+
+**Guided storage configuration:**
+```
+Use an entire disk: ✓ selected
+[the 80GB VirtIO disk should be selected]
+Set up this disk as an LVM group: ✓ checked
+```
+→ Done → Continue (on the confirmation screen)
+
+**Profile setup:**
+```
+Your name:           [your name, e.g. Kevin]
+Your server's name:  nemoclaw
+Pick a username:     ubuntu
+Choose a password:   [strong password — save this]
+Confirm password:    [same]
+```
+→ Done
+
+**Ubuntu Pro:** Skip for now → Continue
+
+**SSH Setup:**
+```
+Install OpenSSH server: ✓ checked   ← critical — enables SSH access
+Import SSH identity:    No
+```
+→ Done
+
+**Featured server snaps:** Don't select anything → Done
+
+The installer will now run. This takes about 5–10 minutes. When it finishes, you'll see **"Reboot Now"** — click it.
+
+When the VM reboots, the console will show a login prompt:
+```
+nemoclaw login:
+```
+
+Log in with `ubuntu` and the password you set.
+
+### Step 2: Install the QEMU Guest Agent
+
+The guest agent lets Proxmox communicate cleanly with the VM (shutdown, IP reporting, etc.):
+
+```bash
+sudo apt update
+sudo apt install -y qemu-guest-agent
+sudo systemctl enable qemu-guest-agent
+sudo systemctl start qemu-guest-agent
+```
+
+### Step 3: Set a Static IP
+
+```bash
+sudo nano /etc/netplan/00-installer-config.yaml
+```
+
+Replace the entire file contents with:
 
 ```yaml
-# /etc/netplan/00-installer-config.yaml
 network:
   version: 2
   ethernets:
     ens18:
-      addresses: [192.168.1.21/24]
+      dhcp4: false
+      addresses:
+        - 192.168.1.21/24
       routes:
         - to: default
           via: 192.168.1.1
       nameservers:
-        addresses: [8.8.8.8]
+        addresses:
+          - 8.8.8.8
+          - 8.8.4.4
 ```
+
+Apply it:
 
 ```bash
 sudo netplan apply
 ```
 
+Verify the new IP is active:
+
+```bash
+ip addr show ens18
+# Should show: inet 192.168.1.21/24
+```
+
+### Step 4: Verify SSH Access from Your Laptop
+
+Open a terminal on your laptop:
+
+```bash
+ssh ubuntu@192.168.1.21
+```
+
+If it connects and shows the Ubuntu prompt, you're good. You can close the noVNC console in Proxmox and work entirely from SSH from here on.
+
+> **Tip:** Set up SSH key authentication so you don't need a password every time:
+> ```bash
+> # On your laptop — generate a key if you don't have one
+> ssh-keygen -t ed25519 -C "your_email@example.com"
+>
+> # Copy your public key to the VM
+> ssh-copy-id ubuntu@192.168.1.21
+>
+> # Now test — should log in without a password
+> ssh ubuntu@192.168.1.21
+> ```
+
+### Step 5: Basic System Hardening
+
+```bash
+# Update all packages
+sudo apt update && sudo apt full-upgrade -y
+
+# Install useful tools
+sudo apt install -y curl wget git htop unzip ufw
+
+# Firewall — allow SSH only from your LAN
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow from 192.168.1.0/24 to any port 22
+sudo ufw --force enable
+
+# Auto security updates
+sudo apt install -y unattended-upgrades
+sudo dpkg-reconfigure --priority=low unattended-upgrades
+# Select "Yes" when prompted
+
+# Set timezone
+sudo timedatectl set-timezone America/Chicago
+# Adjust to your timezone. List options: timedatectl list-timezones
+```
+
+### Step 6: Install Prerequisites for NemoClaw
+
+```bash
+# Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
+
+# Verify Docker works
+docker run hello-world
+# Should print: "Hello from Docker!"
+
+# Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Verify versions
+node --version    # Must be >= 20 (will show v22.x.x)
+docker --version  # Any recent version is fine
+```
+
 ---
 
-## 4.3 NemoClaw + OpenClaw
+## 4.5 NemoClaw + OpenClaw
 
 > NemoClaw wraps OpenClaw in a hardened sandbox — enforcing network egress policy,
 > filesystem isolation, and process sandboxing via NVIDIA OpenShell.
 > OpenClaw's built-in coding agent orchestration (Claude Code, Codex via ACP harness)
 > runs directly inside this sandbox. No separate agent VM required.
 
-### Prerequisites on the NemoClaw VM
+### Before You Start: Get Your Credentials
+
+You need two things before running the installer:
+
+**1. NVIDIA API Key (free)**
+- Go to [build.nvidia.com](https://build.nvidia.com)
+- Click any model → click **"Get API Key"**
+- Sign in with (or create) an NVIDIA developer account — it's free
+- Copy the key — looks like `nvapi-xxxxxxxxxxxxxxxxxxxx`
+
+**2. OpenClaw Subscription**
+- Go to [openclaw.ai](https://openclaw.ai) and create an account
+- Subscribe to a plan
+- Note your login email and password — the NemoClaw wizard will ask for them
+
+### Step 1: Install NemoClaw
+
+SSH into the NemoClaw VM:
 
 ```bash
 ssh ubuntu@192.168.1.21
-
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER && newgrp docker
-
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-
-node --version   # Must be >= 20
-docker --version
 ```
 
-### Install NemoClaw
+Install NemoClaw:
 
 ```bash
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 source ~/.bashrc
+
+# Verify it installed
+nemoclaw --version
 ```
 
-### Run the Onboard Wizard
+### Step 2: Run the Onboard Wizard
 
 ```bash
 nemoclaw onboard
 ```
 
-1. **NVIDIA API key** — get one free at [build.nvidia.com](https://build.nvidia.com) → any model → "Get API Key"
-2. **Sandbox name** — e.g. `my-assistant`
-3. **Inference provider** — NVIDIA Cloud (default)
-4. **WhatsApp** — yes
+The wizard will ask for:
 
-### Connect WhatsApp
+1. **NVIDIA API key** — paste the `nvapi-xxx` key you copied above
+2. **Sandbox name** — type `my-assistant` (or any name you like, no spaces)
+3. **OpenClaw account** — enter your openclaw.ai email and password
+4. **Inference provider** — select `NVIDIA Cloud (Nemotron 120B)` — this is the default
+5. **WhatsApp** — select `Yes`
+
+The wizard creates your sandbox and pulls the OpenClaw container. This takes 2–5 minutes.
+
+### Step 3: Connect WhatsApp
 
 ```bash
 nemoclaw my-assistant connect
+```
 
+This drops you into the sandbox shell. Your prompt will change to something like `sandbox$`.
+
+Inside the sandbox:
+
+```bash
 sandbox$ openclaw channels login whatsapp
-# Scan QR code with WhatsApp → Settings → Linked Devices → Link a Device
+```
 
+A QR code will appear in the terminal.
+
+On your phone:
+```
+WhatsApp → Settings → Linked Devices → Link a Device → scan the QR code
+```
+
+After scanning, you'll see a confirmation in the terminal. Then:
+
+```bash
 sandbox$ openclaw start
+```
+
+Your AI assistant is now live. Send a WhatsApp message — it should respond within 10 seconds.
+
+### Step 4: Configure Auto-Start on Boot
+
+Exit the sandbox (`exit` or Ctrl+D), then back on the VM:
+
+```bash
+# Create a systemd service so NemoClaw starts automatically on VM boot
+sudo tee /etc/systemd/system/nemoclaw.service > /dev/null << 'EOF'
+[Unit]
+Description=NemoClaw AI Sandbox
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+ExecStart=/usr/local/bin/nemoclaw my-assistant start --foreground
+ExecStop=/usr/local/bin/nemoclaw my-assistant stop
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl enable nemoclaw
+sudo systemctl start nemoclaw
+
+# Check it's running
+sudo systemctl status nemoclaw
+```
+
+### Step 5: NemoClaw Management Commands
+
+```bash
+nemoclaw my-assistant status       # Health check
+nemoclaw my-assistant logs -f      # Live logs (Ctrl+C to exit)
+nemoclaw my-assistant connect      # Shell into sandbox
+nemoclaw my-assistant stop         # Stop the sandbox
+nemoclaw my-assistant start        # Start the sandbox
+openshell term                     # Live network request monitor
 ```
 
 ### NemoClaw Security Layers
@@ -414,43 +805,86 @@ sandbox$ openclaw start
 | Process | Privilege escalation, dangerous syscalls |
 | Inference | All model calls routed through OpenShell gateway |
 
-```bash
-openshell term                     # Live network request monitor
-nemoclaw my-assistant status       # Health check
-nemoclaw my-assistant logs -f      # Live logs
-nemoclaw my-assistant connect      # Shell into sandbox
-```
-
 ---
 
-## 4.4 Ollama + Local Models
+## 4.6 Ollama + Local Models
 
 > **Why LXC, not on the host?** If Ollama crashes on the Proxmox host it can freeze
 > the hypervisor — taking everything down. Running it in an LXC contains crashes to
 > just the LXC while Proxmox and the NemoClaw VM stay up.
 
-### Create the Ollama LXC
+### Step 1: Download the Ubuntu LXC Template
 
-In Proxmox UI: **Create CT**
+In the Proxmox web UI:
 
+1. In the left panel, click **local (proxmox)** → **CT Templates**
+2. Click **Templates** button
+3. Search for `ubuntu-22.04` → select **ubuntu-22.04-standard** → click **Download**
+4. Wait for the download to complete
+
+### Step 2: Create the Ollama LXC
+
+In the Proxmox web UI, click **Create CT** (top right):
+
+**General tab:**
 ```
-CT ID:      200
-Hostname:   ollama
-Template:   Ubuntu 22.04
-Disk:       32GB
-CPU:        4 cores
-RAM:        8192 MB
-Network:    vmbr0, IP 192.168.1.25/24, Gateway 192.168.1.1
-Unprivileged: YES
+Node:         proxmox
+CT ID:        200
+Hostname:     ollama
+Password:     [set a root password — save it]
 ```
 
-### Bind-Mount the GPU
+**Template tab:**
+```
+Storage:   local
+Template:  ubuntu-22.04-standard_*.tar.zst
+```
 
-Before starting the container:
+**Disks tab:**
+```
+Storage:  local-lvm
+Disk size: 32
+```
+
+**CPU tab:**
+```
+Cores: 4
+```
+
+**Memory tab:**
+```
+Memory:  8192
+Swap:    2048
+```
+
+**Network tab:**
+```
+Name:     eth0
+Bridge:   vmbr0
+IPv4:     Static
+IPv4/CIDR: 192.168.1.25/24
+Gateway:  192.168.1.1
+```
+
+**DNS tab:**
+```
+DNS servers: 8.8.8.8
+```
+
+**Confirm tab:** Review, then click **Finish**
+
+> **Important:** Do NOT start the container yet — you need to add the GPU bind-mount first.
+
+### Step 3: Bind-Mount the GPU
+
+SSH into the Proxmox host:
 
 ```bash
+ssh root@192.168.1.20
 nano /etc/pve/lxc/200.conf
 ```
+
+Add these lines at the bottom of the file:
 
 ```
 lxc.cgroup2.devices.allow: c 226:0 rwm
@@ -460,19 +894,48 @@ lxc.mount.entry: /dev/dri/card0 dev/dri/card0 none bind,optional,create=file
 lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
 ```
 
+Save and exit (`Ctrl+O`, Enter, `Ctrl+X`).
+
+Also enable "unprivileged" mode with nesting (required for GPU access):
+
 ```bash
+# In the Proxmox web UI:
+# 200 (ollama) → Options → Features → Edit → check "Nesting"
+# Or via CLI:
+echo "features: nesting=1" >> /etc/pve/lxc/200.conf
+```
+
+### Step 4: Start the LXC and Install Ollama
+
+```bash
+# Start the container
 pct start 200
+
+# Enter it
 pct enter 200
 ```
 
-### Install and Configure Ollama
+You're now inside the Ollama LXC as root. Run:
 
 ```bash
+# Update and install tools
+apt update && apt full-upgrade -y
+apt install -y curl wget
+
+# Verify the GPU is visible
+ls /dev/dri/
+# Must show: card0  renderD128
+# If this directory is empty, the bind-mount didn't work — double-check /etc/pve/lxc/200.conf
+
+# Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
+```
 
-# Verify GPU is visible
-ls /dev/dri/   # Should show: card0  renderD128
+### Step 5: Configure Ollama
 
+Configure Ollama to listen on all interfaces (so the NemoClaw VM can reach it) and set the context window:
+
+```bash
 mkdir -p /etc/systemd/system/ollama.service.d
 cat > /etc/systemd/system/ollama.service.d/override.conf << 'EOF'
 [Service]
@@ -482,44 +945,86 @@ EOF
 
 systemctl daemon-reload
 systemctl enable ollama
-systemctl start ollama
+systemctl restart ollama
 
-# Verify GPU usage
-ollama run phi3:mini "hello" --verbose
-# Look for: "using GPU: AMD Radeon Graphics"
+# Verify it's running
+systemctl status ollama
+# Should show: Active: active (running)
 ```
 
-> **Context window:** `OLLAMA_NUM_CTX=32768` sets a 32K default for all models.
-> Increase to `65536` or `131072` for 64K/128K if needed. Larger context uses more
-> unified memory for the KV cache — a 32B model at 128K adds ~15–20GB on top of ~20GB
-> for weights. 32K is a good starting point.
+> **Context window:** `OLLAMA_NUM_CTX=32768` sets a 32K token default for all models.
+> Increase to `65536` for 64K if needed. Larger context uses more unified memory for the
+> KV cache — 32K is a good starting point for 32B models.
 
-### Pull Models
+### Step 6: Verify GPU Usage
 
 ```bash
-ollama pull qwen2.5-coder:32b   # Coding agents
-ollama pull phi3:mini            # Fast fallback
+# Pull a small model first for a quick test
+ollama pull phi3:mini
+
+# Run it with verbose output and check for GPU
+ollama run phi3:mini "say hello" --verbose
+```
+
+In the output, look for a line containing:
+```
+using GPU: AMD Radeon Graphics
+```
+
+If you see it, the GPU is working. If you see `using CPU`, the bind-mount isn't working — revisit Step 3.
+
+### Step 7: Pull the Main Models
+
+```bash
+# This takes a while — 32B model is ~20GB
+ollama pull qwen2.5-coder:32b    # Primary coding agent model
+
+# phi3 already pulled in Step 6 — fast fallback
 ollama list
+# Should show both models
 ```
 
-### Restrict LAN Access
+### Step 8: Restrict LAN Access (Security)
+
+Back on the Proxmox host, restrict Ollama so it's only accessible from the NemoClaw VM and Proxmox host (not from your phone, laptop, etc.):
 
 ```bash
-# On Proxmox host
-iptables -A FORWARD -s 192.168.1.0/24 -d 192.168.1.25 -p tcp --dport 11434 -j ACCEPT
-iptables -A FORWARD -d 192.168.1.25 -j DROP
+ssh root@192.168.1.20
+
+# Allow only NemoClaw VM and host to reach Ollama
+iptables -A FORWARD -s 192.168.1.21 -d 192.168.1.25 -p tcp --dport 11434 -j ACCEPT
+iptables -A FORWARD -s 192.168.1.20 -d 192.168.1.25 -p tcp --dport 11434 -j ACCEPT
+iptables -A FORWARD -d 192.168.1.25 -p tcp --dport 11434 -j DROP
+
+# Save rules so they persist across reboots
 apt install -y iptables-persistent
 netfilter-persistent save
 ```
 
----
-
-## 4.5 Multi-Agent Configuration
+Verify from the NemoClaw VM that Ollama is reachable:
 
 ```bash
+ssh ubuntu@192.168.1.21
+curl http://192.168.1.25:11434/api/tags
+# Should return JSON with your model list
+```
+
+---
+
+## 4.7 Multi-Agent Configuration
+
+This sets up three agents: the main orchestrator (uses NVIDIA cloud Nemotron 120B),
+a coding agent (uses local Qwen 2.5 Coder), and a fast fallback (uses local phi3).
+
+```bash
+# Connect into the NemoClaw sandbox
 nemoclaw my-assistant connect
+
+# Edit the OpenClaw config
 sandbox$ nano ~/.openclaw/openclaw.json
 ```
+
+Replace the contents with:
 
 ```json
 {
@@ -530,14 +1035,21 @@ sandbox$ nano ~/.openclaw/openclaw.json
       }
     },
     "list": [
-      { "id": "main", "default": true },
+      {
+        "id": "main",
+        "default": true
+      },
       {
         "id": "coder",
-        "model": { "primary": "ollama/qwen2.5-coder:32b" }
+        "model": {
+          "primary": "ollama/qwen2.5-coder:32b"
+        }
       },
       {
         "id": "fast",
-        "model": { "primary": "ollama/phi3:mini" }
+        "model": {
+          "primary": "ollama/phi3:mini"
+        }
       }
     ]
   },
@@ -556,36 +1068,63 @@ sandbox$ nano ~/.openclaw/openclaw.json
 }
 ```
 
+Save and exit.
+
+Allow Ollama in the OpenShell network policy (exit sandbox first):
+
 ```bash
-# Allow Ollama in OpenShell policy (on NemoClaw VM host)
+sandbox$ exit
+
+# On the NemoClaw VM host
 openshell policy add --sandbox my-assistant \
   --host 192.168.1.25 --port 11434 --protocol rest --name ollama-local
 ```
 
+Restart the sandbox to apply config:
+
+```bash
+nemoclaw my-assistant stop
+nemoclaw my-assistant start
+```
+
 ---
 
-## 4.6 Remote Access
+## 4.8 Remote Access
 
 Everything uses outbound-only connections — no ports forwarded on your router.
 
 ### Tailscale: Access Your Local LLM from Anywhere
 
+Install Tailscale on the Proxmox host:
+
 ```bash
-# On Proxmox host
+ssh root@192.168.1.20
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
-tailscale ip -4   # Note your Tailscale IP (e.g. 100.64.0.1)
 ```
 
-Install Tailscale on your phone (same account). Then:
+Tailscale will print a URL — open it on your laptop to authenticate.
 
-```
-Enchanted app (iOS) → Settings → Server URL → http://100.64.0.1:11434
+After auth:
+```bash
+tailscale ip -4
+# Returns your Tailscale IP, e.g.: 100.64.0.1
 ```
 
-Or access Open WebUI (run on the NemoClaw VM):
+Install the [Tailscale app](https://tailscale.com/download) on your phone and sign in with the same account.
+
+Once both devices are on Tailscale, you can reach Ollama from your phone at:
+```
+http://100.64.0.1:11434
+```
+
+### Open WebUI (Optional — Chat with Local Models from a Browser)
+
+Run this on the NemoClaw VM if you want a web UI to talk directly to Ollama:
 
 ```bash
+ssh ubuntu@192.168.1.21
+
 docker run -d \
   -p 8080:8080 \
   -e OLLAMA_BASE_URL=http://192.168.1.25:11434 \
@@ -594,25 +1133,28 @@ docker run -d \
   ghcr.io/open-webui/open-webui:main
 ```
 
-Access from phone: `http://100.64.0.1:8080`
+Access at `http://192.168.1.21:8080` on your LAN, or `http://100.64.0.1:8080` via Tailscale from anywhere.
 
 ---
 
-## 4.7 Security
+## 4.9 Security Checklist
 
-### Proxmox Checklist
+### Proxmox Host
+- [ ] Proxmox UI accessible from LAN only (`ufw status` shows rules for port 8006)
+- [ ] SSH accessible from LAN only (`ufw status` shows rule for port 22)
+- [ ] Ollama port 11434 blocked except from NemoClaw VM (`iptables -L FORWARD`)
+- [ ] iptables rules persisted (`netfilter-persistent save` was run)
+- [ ] Unattended upgrades enabled
 
-- [ ] Proxmox UI accessible from LAN only (UFW rule in place)
-- [ ] SSH accessible from LAN only
-- [ ] Ollama port 11434 blocked from internet (iptables in place)
-- [ ] iptables rules persistent
-- [ ] Proxmox updated regularly
+### NemoClaw VM
+- [ ] UFW enabled, SSH from LAN only
+- [ ] OpenShell network policy reviewed (`openshell term`)
+- [ ] NVIDIA API key not stored in code — only in `~/.nemoclaw/credentials.json`
+- [ ] OpenClaw workspace doesn't contain plaintext passwords
 
-### NemoClaw Sandbox Checklist
-
-- [ ] OpenShell network policy reviewed regularly via `openshell term`
-- [ ] NVIDIA API key stored in `~/.nemoclaw/credentials.json`, not in code
-- [ ] OpenClaw workspace does not contain sensitive credentials
+### Ollama LXC
+- [ ] Only accessible from NemoClaw VM and Proxmox host
+- [ ] Not reachable from your phone/laptop (test: `curl --connect-timeout 5 http://192.168.1.25:11434/api/tags` from your laptop — should fail)
 
 ---
 
@@ -631,16 +1173,20 @@ Access from phone: `http://100.64.0.1:8080`
 
 ## 5.2 Mac Studio Setup
 
-- Mac Studio M5 Ultra (256GB) — recommended; M4 Ultra (192GB) available now
-- Wired ethernet to router, static IP: `192.168.1.10`
+**Hardware:** Mac Studio M5 Ultra (256GB) — recommended; M4 Ultra (192GB) available now
+
+1. Plug in ethernet to your router
+2. Complete macOS setup if new
+3. Assign static IP: Google Home app → Wi-Fi → Devices → Mac Studio → Reserve IP → `192.168.1.10`
 
 ### macOS Hardening
 
 ```
-FileVault → On
-Firewall → On, Stealth Mode → On
-Remote Login → Off
-Screen Sharing → Off
+System Settings → Privacy & Security → FileVault → Turn On
+System Settings → Network → Firewall → Turn On
+System Settings → Network → Firewall → Options → Enable Stealth Mode
+System Settings → General → Sharing → Remote Login → Off
+System Settings → General → Sharing → Screen Sharing → Off
 ```
 
 ### Install Ollama
@@ -649,11 +1195,13 @@ Screen Sharing → Off
 brew install --cask ollama
 ```
 
-### Configure with Extended Context
+### Configure with Extended Context and LAN Binding
 
 ```bash
 sudo nano /Library/LaunchDaemons/com.ollama.ollama.plist
 ```
+
+Find the `<key>EnvironmentVariables</key>` section (or add it if missing) and set:
 
 ```xml
 <key>EnvironmentVariables</key>
@@ -665,12 +1213,14 @@ sudo nano /Library/LaunchDaemons/com.ollama.ollama.plist
 </dict>
 ```
 
+Apply the config:
+
 ```bash
 sudo launchctl unload /Library/LaunchDaemons/com.ollama.ollama.plist
 sudo launchctl load /Library/LaunchDaemons/com.ollama.ollama.plist
 ```
 
-### Firewall (pf)
+### Firewall: Allow LAN Access to Ollama Only
 
 ```bash
 sudo nano /etc/pf.anchors/ollama-protect
@@ -682,31 +1232,71 @@ pass in on utun0 proto tcp from 100.64.0.0/10 to any port 11434
 block in proto tcp to any port 11434
 ```
 
+```bash
+echo 'anchor "ollama-protect" from "/etc/pf.anchors/ollama-protect"' \
+  | sudo tee -a /etc/pf.conf
+sudo pfctl -f /etc/pf.conf
+sudo pfctl -e
+```
+
 ### Pull Models
 
 ```bash
-ollama pull qwen2.5-coder:72b
-ollama pull llama3.1:70b
-ollama pull deepseek-r1:70b
-ollama pull qwen2.5:7b
+ollama pull qwen2.5-coder:72b    # Primary coding agent (~46GB)
+ollama pull llama3.1:70b          # Orchestration (~45GB)
+ollama pull deepseek-r1:70b       # Complex reasoning (~45GB)
+ollama pull qwen2.5:7b            # Fast tasks (~5GB)
 ```
 
-## 5.3 Switch Inference
+## 5.3 Switch OpenClaw to Mac Studio
 
 ```bash
-# NemoClaw sandbox — update openclaw.json
-"ollama": { "baseUrl": "http://192.168.1.10:11434" }
+# On the NemoClaw VM
+nemoclaw my-assistant connect
+sandbox$ nano ~/.openclaw/openclaw.json
+```
 
-# Allow Mac Studio in OpenShell policy
+Change the ollama provider URL:
+
+```json
+"ollama": {
+  "baseUrl": "http://192.168.1.10:11434",
+  "api": "ollama"
+}
+```
+
+Also update the coder agent to use the 72B model:
+
+```json
+{
+  "id": "coder",
+  "model": {
+    "primary": "ollama/qwen2.5-coder:72b"
+  }
+}
+```
+
+Allow Mac Studio in the OpenShell policy:
+
+```bash
+sandbox$ exit
+
 openshell policy add --sandbox my-assistant \
   --host 192.168.1.10 --port 11434 --protocol rest --name mac-studio-ollama
 ```
 
+Restart:
+
+```bash
+nemoclaw my-assistant stop
+nemoclaw my-assistant start
+```
+
 ## 5.4 Model Capabilities
 
-| Model | RAM | Speed | Best for |
+| Model | RAM | Speed (M5 Ultra) | Best for |
 |-------|-----|-------|---------|
-| qwen2.5:7b | 5GB | 200+ tok/s | Fast tasks |
+| qwen2.5:7b | 5GB | 200+ tok/s | Fast tasks, HA |
 | llama3.1:70b | 45GB | 55–75 tok/s | Orchestration |
 | qwen2.5-coder:72b | 46GB | 45–65 tok/s | Coding agents |
 | deepseek-r1:70b | 45GB | 40–60 tok/s | Complex reasoning |
@@ -748,7 +1338,7 @@ Rule 5: Allow VLAN 1 → VLAN 30, port 80/443
 | Ollama LXC | 192.168.1.25 | 192.168.1.25 | 1 |
 | Mac Studio | 192.168.1.10 | **192.168.2.10** | **20** |
 
-Update openclaw.json and OpenShell policy to `192.168.2.10` after Phase 3.
+After Phase 3, update openclaw.json and OpenShell policy to use `192.168.2.10`.
 
 ---
 
@@ -756,67 +1346,125 @@ Update openclaw.json and OpenShell policy to `192.168.2.10` after Phase 3.
 
 > **Independent of Phase 2 and 3** — add at any time.
 > Runs as a VM on the existing MS-S1 MAX alongside the AI stack.
-> **Tradeoff:** HA shares the MS-S1 MAX with the AI stack. If Proxmox goes down
-> (maintenance, crash), HA goes down too. For most home setups this is acceptable —
-> you get significantly better hardware than a Pi (faster CPU, more RAM, better
-> video decoding for Frigate) at the cost of that single point of failure.
 
 ## What You Need
 
 - Google Coral USB Accelerator (~$60–80) — for AI camera detection via Frigate
-- No additional compute hardware — HA runs as a VM on the MS-S1 MAX
+- No additional compute hardware
 
 ## Create the Home Assistant VM
 
-HAOS (Home Assistant Operating System) requires a VM — it cannot run in an LXC.
+HAOS requires a VM — it cannot run in an LXC.
 
-In Proxmox UI: **Create VM**
+### Step 1: Download and Import the HAOS Image
 
-```
-VM ID: 101  |  Name: home-assistant
-OS:    Download HAOS qcow2 image (see below)
-Disk:  32GB VirtIO SCSI
-CPU:   2 cores, type: host
-RAM:   4096 MB
-Net:   vmbr0, VirtIO
-```
-
-### Flash HAOS
+SSH into the Proxmox host:
 
 ```bash
-# On Proxmox host — download and import HAOS image
-wget https://github.com/home-assistant/operating-system/releases/latest/download/haos_ova-*.qcow2.xz
+ssh root@192.168.1.20
+cd /tmp
+
+# Download the latest HAOS image for generic x86-64
+HAOS_VERSION=$(curl -s https://api.github.com/repos/home-assistant/operating-system/releases/latest | grep tag_name | cut -d '"' -f4)
+wget "https://github.com/home-assistant/operating-system/releases/download/${HAOS_VERSION}/haos_ova-${HAOS_VERSION}.qcow2.xz"
+
+# Extract
 xz -d haos_ova-*.qcow2.xz
-qm importdisk 101 haos_ova-*.qcow2 local-lvm
+ls *.qcow2   # Confirm the file is there
 ```
 
-In Proxmox UI: VM 101 → Hardware → Unused Disk → Edit → Add as `scsi0`, boot order to disk.
+### Step 2: Create the VM
 
-Start the VM and access HA at `http://192.168.1.30:8123` after ~5 minutes.
+In the Proxmox web UI, click **Create VM**:
 
-Set static IP in Google Nest app: **Devices → HA VM → Reserve IP → 192.168.1.30**
-
-### Pass the Coral USB to the HA VM
-
-Plug the Coral USB into the MS-S1 MAX, then:
-
+**General tab:**
 ```
-Proxmox UI → VM 101 → Hardware → Add → USB Device
-Select: Google Coral USB Accelerator
+VM ID: 101  |  Name: home-assistant
 ```
 
-Coral appears inside HAOS automatically. Verify in Frigate settings.
+**OS tab:**
+```
+Do not use any media   ← we'll import the disk manually
+```
 
-### Add a Dedicated Ollama Instance for HA
+**System tab:**
+```
+Machine:    q35
+BIOS:       OVMF (UEFI)
+Add EFI Disk: ✓  →  Storage: local-lvm
+```
 
-To keep HA inference from competing with coding agent workloads, add a second
-Ollama instance in the existing Ollama LXC:
+**Disks tab:**
+```
+Delete the default disk (we'll import the HAOS disk below)
+```
+
+**CPU tab:**
+```
+Cores: 2  |  Type: host
+```
+
+**Memory tab:**
+```
+Memory: 4096
+```
+
+**Network tab:**
+```
+Bridge: vmbr0  |  Model: VirtIO
+```
+
+Click **Finish**.
+
+### Step 3: Import the HAOS Disk
+
+```bash
+# On Proxmox host — import the qcow2 image as VM 101's disk
+qm importdisk 101 /tmp/haos_ova-*.qcow2 local-lvm
+```
+
+In the Proxmox web UI:
+1. Click **101 (home-assistant)** → **Hardware**
+2. You'll see **Unused Disk 0** — click it → click **Edit**
+3. Set Bus/Device to **SCSI** → **scsi0** → click **Add**
+4. Click **Options** → **Boot Order** → drag `scsi0` to the top → click **OK**
+
+### Step 4: Start Home Assistant
+
+```bash
+pct start 101   # or click Start in the web UI
+```
+
+Wait 3–5 minutes for first boot. Then open:
+```
+http://192.168.1.30:8123
+```
+
+*(Proxmox will report the HAOS VM's IP via the guest agent once HA is running)*
+
+Complete the HA onboarding wizard in the browser.
+
+Set static IP: Google Home app → Wi-Fi → Devices → find the HA VM → Reserve IP → `192.168.1.30`
+
+### Step 5: Pass the Coral USB to the HA VM
+
+Plug the Coral USB into the MS-S1 MAX. Then in the Proxmox web UI:
+
+```
+101 (home-assistant) → Hardware → Add → USB Device
+Device: [select the Google Coral USB Accelerator from the list]
+```
+
+Click **Add**. The Coral appears inside HAOS automatically. Verify in Frigate settings.
+
+### Step 6: Add a Dedicated Ollama Instance for HA
+
+To keep HA inference from competing with coding agent workloads, add a second Ollama
+instance on a different port inside the existing Ollama LXC:
 
 ```bash
 pct enter 200
-```
 
-```bash
 cat > /etc/systemd/system/ollama-ha.service << 'EOF'
 [Unit]
 Description=Ollama HA Instance
@@ -837,26 +1485,32 @@ EOF
 systemctl enable ollama-ha
 systemctl start ollama-ha
 
+# Pull small models for HA use
 OLLAMA_HOST=localhost:11435 ollama pull qwen2.5:7b
 OLLAMA_HOST=localhost:11435 ollama pull phi3:mini
+
+# Verify
+curl http://localhost:11435/api/tags
 ```
 
-Update the Proxmox host iptables to allow HA VM to reach both Ollama ports:
+Allow the HA VM to reach the HA Ollama port on the Proxmox host:
 
 ```bash
-# On Proxmox host — update firewall rules
-iptables -I FORWARD -s 192.168.1.0/24 -d 192.168.1.25 -p tcp --dport 11435 -j ACCEPT
+ssh root@192.168.1.20
+iptables -I FORWARD -s 192.168.1.30 -d 192.168.1.25 -p tcp --dport 11435 -j ACCEPT
 netfilter-persistent save
 ```
 
-### Install Frigate Add-on
+### Step 7: Install Frigate Add-on
 
+In Home Assistant:
 ```
-Settings → Add-ons → Add-on Store → Search "Frigate" → Install
+Settings → Add-ons → Add-on Store → search "Frigate" → Install
 ```
+
+Basic config (`/config/frigate.yml`):
 
 ```yaml
-# /config/frigate.yml
 detectors:
   coral:
     type: edgetpu
@@ -880,7 +1534,7 @@ cameras:
         days: 7
 ```
 
-### Connect Ollama to Home Assistant
+### Step 8: Connect Ollama to Home Assistant
 
 ```
 Settings → Devices & Services → Add Integration → Ollama
@@ -888,14 +1542,13 @@ Host: http://192.168.1.25:11435
 Model: qwen2.5:7b
 ```
 
-### Remote Access via Nabu Casa
+### Step 9: Remote Access via Nabu Casa
 
 ```
 Settings → Home Assistant Cloud → Sign In
-Subscribe at nabucasa.com ($6.50/mo)
 ```
 
-No port forwarding required — outbound tunnel only.
+Subscribe at [nabucasa.com](https://www.nabucasa.com) ($6.50/mo). No port forwarding required — outbound tunnel only.
 
 ### Sample AI Automation
 
@@ -935,22 +1588,33 @@ can use the GPU simultaneously for inference and transcoding.
 
 ## Create the Media Server LXC
 
+In the Proxmox web UI, click **Create CT**:
+
 ```
 CT ID:      202
 Hostname:   media-server
-Template:   Ubuntu 22.04
-Disk:       32GB
+Password:   [set root password]
+Template:   ubuntu-22.04-standard_*.tar.zst
+Disk:       32GB  (local-lvm)
 CPU:        4 cores
 RAM:        4096 MB
 Network:    vmbr0, IP 192.168.1.22/24, Gateway 192.168.1.1
 Unprivileged: YES
 ```
 
+Click **Finish** — do NOT start yet.
+
+Add the GPU bind-mount:
+
 ```bash
+ssh root@192.168.1.20
 nano /etc/pve/lxc/202.conf
 ```
 
+Add at the bottom:
+
 ```
+features: nesting=1
 lxc.cgroup2.devices.allow: c 226:0 rwm
 lxc.cgroup2.devices.allow: c 226:128 rwm
 lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir
@@ -958,17 +1622,20 @@ lxc.mount.entry: /dev/dri/card0 dev/dri/card0 none bind,optional,create=file
 lxc.mount.entry: /dev/dri/renderD128 dev/dri/renderD128 none bind,optional,create=file
 ```
 
+Start and install Jellyfin:
+
 ```bash
 pct start 202
 pct enter 202
 
+apt update
 curl -fsSL https://repo.jellyfin.org/install-debuntu.sh | sudo bash
-sudo systemctl enable jellyfin && sudo systemctl start jellyfin
+systemctl enable jellyfin && systemctl start jellyfin
 ```
 
-Access Jellyfin: `http://192.168.1.22:8096`
+Access Jellyfin at `http://192.168.1.22:8096`
 
-Enable hardware transcoding:
+Enable hardware transcoding in Jellyfin:
 ```
 Dashboard → Playback → Transcoding
 Hardware acceleration: VAAPI
@@ -1004,58 +1671,72 @@ VAAPI Device: /dev/dri/renderD128
 | + HA (Phase 4) | + qwen2.5:7b | ~27GB | Still easy |
 | Extended context | qwen2.5-coder:32b + 128K | ~40GB | Fits, leaves room |
 
-## Is Phase 2 Worth It?
-
-**Yes, if you:** run 3+ parallel agents, work on large codebases, want 100% local
-inference, hit NVIDIA rate limits, or want 70B+ models at usable speed.
-
-**Not yet, if you:** use this primarily as a personal assistant (Nemotron 120B
-handles this well) or are satisfied with 32K context.
-
 ---
 
 # Part 7: Testing & Validation
 
 ## Phase 1 Checks
 
+Run these after completing Phase 1 to confirm everything is wired up correctly.
+
 ```bash
-# Ollama running
+# 1. Ollama is running and serving models
 curl http://192.168.1.25:11434/api/tags
+# Expected: JSON with qwen2.5-coder:32b and phi3:mini listed
 
-# Context window configured
-curl http://192.168.1.25:11434/api/show -d '{"name":"qwen2.5-coder:32b"}' | grep num_ctx
+# 2. Context window is configured
+curl http://192.168.1.25:11434/api/show \
+  -d '{"name":"qwen2.5-coder:32b"}' | grep num_ctx
+# Expected: "num_ctx": 32768
 
-# Ollama not reachable from internet (test on cellular)
+# 3. Ollama NOT reachable from internet (run this on cellular data, not WiFi)
 curl --connect-timeout 5 http://YOUR_PUBLIC_IP:11434/api/tags
-# Expected: timeout
+# Expected: connection timeout — good, it's locked down
 
-# NemoClaw health
+# 4. NemoClaw sandbox health
 nemoclaw my-assistant status
+# Expected: Running, all green
+
+# 5. OpenShell network policy
+openshell term
+# Review any blocked requests — approve Ollama LXC traffic if prompted
 ```
 
 ## WhatsApp End-to-End Test
 
-Send: *"What's 7 times 8?"* — should respond within 5–10 seconds.
+Send a WhatsApp message to yourself: *"What's 7 times 8?"*
+
+Expected: response within 5–10 seconds.
+
+Watch live logs if it's not responding:
 
 ```bash
-nemoclaw my-assistant logs -f   # Watch live
+nemoclaw my-assistant logs -f
 ```
 
-## Phase 4 (HA) Checks
+## Phase 4 (Home Assistant) Checks
 
 ```bash
-# HA Ollama instance
+# HA Ollama instance is running
 curl http://192.168.1.25:11435/api/tags
+# Expected: JSON with qwen2.5:7b and phi3:mini
 
-# Coral detected in Frigate
-# Settings → Devices → Frigate → Detectors → coral should show "active"
+# Frigate Coral detector is active
+# HA UI → Settings → Devices → Frigate → Detectors → coral → Active
 ```
 
-## Phase 2 Checks
+## Phase 2 (Mac Studio) Checks
 
 ```bash
+# Mac Studio Ollama is reachable from NemoClaw VM
+ssh ubuntu@192.168.1.21
 curl http://192.168.1.10:11434/api/tags
-curl http://192.168.1.10:11434/api/show -d '{"name":"llama3.1:70b"}' | grep num_ctx
+# Expected: JSON with 70B+ models
+
+# Context window set correctly
+curl http://192.168.1.10:11434/api/show \
+  -d '{"name":"llama3.1:70b"}' | grep num_ctx
+# Expected: "num_ctx": 65536
 ```
 
 ---
@@ -1065,46 +1746,68 @@ curl http://192.168.1.10:11434/api/show -d '{"name":"llama3.1:70b"}' | grep num_
 ## Weekly
 
 ```bash
+# Update Ollama models (LXC)
+pct enter 200
 ollama pull qwen2.5-coder:32b
 ollama pull phi3:mini
 
+# Check NemoClaw health
 nemoclaw my-assistant status
-openshell term   # Review blocked network requests
 
+# Review network requests the sandbox has made
+openshell term
+
+# Check service status
 systemctl status ollama
-# If Phase 4 deployed:
+systemctl status nemoclaw   # On the NemoClaw VM
+```
+
+If Phase 4 is deployed:
+```bash
 systemctl status ollama-ha
 ```
 
 ## Monthly
 
 ```bash
+# Update Proxmox host
 ssh root@192.168.1.20
 apt update && apt full-upgrade -y
 
-ssh ubuntu@192.168.1.21 "sudo apt update && sudo apt upgrade -y"
+# Update NemoClaw VM
+ssh ubuntu@192.168.1.21
+sudo apt update && sudo apt upgrade -y
 
+# Update Ollama LXC
 pct enter 200
 apt update && apt upgrade -y
+
+# Update NemoClaw itself
+nemoclaw update
 ```
 
 ## Proxmox Backups
 
+In the Proxmox web UI:
 ```
 Datacenter → Backup → Add
-Schedule: Sunday 02:00
-VMs: 100 (nemoclaw)
-LXC: 200 (ollama)
-Mode: Snapshot, Compression: ZSTD
+Schedule:      Sunday 02:00
+Storage:       local
+VMs:           100 (nemoclaw)
+LXC:           200 (ollama)
+Mode:          Snapshot
+Compression:   ZSTD
 ```
 
-> If Phase 4 deployed: add VM 101 (home-assistant) to backup job.
-> If Phase 5 deployed: add LXC 202 (media-server) to backup job.
+> If Phase 4 deployed: add VM 101 (home-assistant) to the backup job.
+> If Phase 5 deployed: add LXC 202 (media-server) to the backup job.
 
-## Phase 2: Mac Studio Model Updates
+## Phase 2: Update All Mac Studio Models
 
 ```bash
+# SSH into Mac Studio or run in Terminal
 ollama list | awk 'NR>1 {print $1}' | while read model; do
+  echo "Updating $model..."
   ollama pull "$model"
 done
 ```
@@ -1118,12 +1821,15 @@ done
 > | MS-S1 MAX (Proxmox) | 192.168.1.20 | 192.168.1.20 | Always VLAN 1 |
 > | NemoClaw VM | 192.168.1.21 | 192.168.1.21 | Always VLAN 1 |
 > | Ollama LXC | 192.168.1.25 | 192.168.1.25 | Always VLAN 1 |
-> | Mac Studio (Phase 2) | 192.168.1.10 | 192.168.2.10 | Moves to VLAN 20 |
+> | Mac Studio (Phase 2) | 192.168.1.10 | **192.168.2.10** | Moves to VLAN 20 |
 > | HA VM (Phase 4) | 192.168.1.30 | 192.168.1.30 | VLAN 1 |
 > | Media Server LXC (Phase 5) | 192.168.1.22 | 192.168.1.22 | VLAN 1 |
 
 ---
 
-*Architecture version: 2.3 — Phase 1 is a lean two-component AI stack (NemoClaw VM + Ollama LXC). Home Assistant moved to Phase 4 as an optional VM on MS-S1 MAX with Coral USB passthrough. Media Server is Phase 5. Raspberry Pi removed from plan.*  
+*Architecture version: 3.0 — Full step-by-step instructions added for Ubuntu ISO download,
+VM/LXC creation, Ubuntu installer walkthrough, SSH setup, NemoClaw onboarding with
+credential prerequisites, and OpenClaw subscription setup. Phase 1 is a lean
+two-component AI stack (NemoClaw VM + Ollama LXC). Raspberry Pi removed from plan.*  
 *Hardware: Minisforum MS-S1 MAX + (Phase 2) Apple Mac Studio M5 Ultra*  
 *Networking: Google Nest compatible — no VLANs required in Phase 1/2*
