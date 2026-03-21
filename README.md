@@ -90,31 +90,31 @@ running on hardware you own, with your data never leaving your home.
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                    HOME NETWORK (192.168.86.0/24)                     ║
+║                    HOME NETWORK (192.168.86.0/24)                    ║
 ║                          Google Nest Router                          ║
 ║                                                                      ║
-║  ┌───────────────────────────────────────────────────────────────┐  ║
+║  ┌────────────────────────────────────────────────────────────────┐  ║
 ║  │                  MS-S1 MAX (192.168.86.38)                     │  ║
-║  │                  Proxmox VE — Bare Metal                      │  ║
-║  │                                                               │  ║
-║  │  ┌──────────────────────────────────────────────────────┐    │  ║
-║  │  │  NemoClaw VM  (192.168.86.21)                         │    │  ║
-║  │  │                                                      │    │  ║
-║  │  │  OpenClaw agent          OpenShell sandbox           │    │  ║
-║  │  │  WhatsApp gateway        Coding agent orchestration  │    │  ║
-║  │  │                                                      │    │  ║
-║  │  │  Main model:   Nemotron 120B (NVIDIA cloud, free)    │    │  ║
-║  │  │  Worker model: Qwen 2.5 Coder 32B (local Ollama)     │    │  ║
-║  │  └──────────────────────────────────────────────────────┘    │  ║
-║  │                                                               │  ║
-║  │  ┌──────────────────────────────────────────────────────┐    │  ║
-║  │  │  Ollama LXC  (192.168.86.25)                          │    │  ║
-║  │  │                                                      │    │  ║
-║  │  │  Radeon 890M — full GPU, no sharing needed           │    │  ║
-║  │  │  Qwen 2.5 Coder 32B  (agents, port 11434)            │    │  ║
-║  │  │  phi3:mini           (fast fallback)                 │    │  ║
-║  │  └──────────────────────────────────────────────────────┘    │  ║
-║  └───────────────────────────────────────────────────────────────┘  ║
+║  │                  Proxmox VE — Bare Metal                       │  ║
+║  │                                                                │  ║
+║  │  ┌────────────────────────────────────────────────────────┐    │  ║
+║  │  │  NemoClaw VM  (192.168.86.21)                          │    │  ║
+║  │  │                                                        │    │  ║
+║  │  │  OpenClaw agent          OpenShell sandbox             │    │  ║
+║  │  │  WhatsApp gateway        Coding agent orchestration    │    │  ║
+║  │  │                                                        │    │  ║
+║  │  │  Main model:   Nemotron 120B (NVIDIA cloud, free)      │    │  ║
+║  │  │  Worker model: Qwen 2.5 Coder 32B (local Ollama)       │    │  ║
+║  │  └────────────────────────────────────────────────────────┘    │  ║
+║  │                                                                │  ║
+║  │  ┌────────────────────────────────────────────────────────┐    │  ║
+║  │  │  Ollama LXC  (192.168.86.25)                           │    │  ║
+║  │  │                                                        │    │  ║
+║  │  │  Radeon 890M — full GPU, no sharing needed             │    │  ║
+║  │  │  Qwen 2.5 Coder 32B  (agents, port 11434)              │    │  ║
+║  │  │  phi3:mini           (fast fallback)                   │    │  ║
+║  │  └────────────────────────────────────────────────────────┘    │  ║
+║  └────────────────────────────────────────────────────────────────┘  ║
 ╚══════════════════════════════════════════════════════════════════════╝
                               │
                           INTERNET
@@ -137,16 +137,16 @@ running on hardware you own, with your data never leaving your home.
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                    HOME NETWORK (192.168.86.0/24)                     ║
+║                    HOME NETWORK (192.168.86.0/24)                    ║
 ║                                                                      ║
-║  ┌───────────────────────────────┐  ┌───────────────────────────┐  ║
-║  │  MS-S1 MAX (192.168.86.38)     │  │  Mac Studio M5 Ultra      │  ║
-║  │  Proxmox — Orchestration      │  │  (192.168.86.10)           │  ║
-║  │                               │  │                           │  ║
-║  │  NemoClaw VM ──────────────────┼─►│  Ollama                  │  ║
-║  │  Ollama LXC (fallback)        │  │  70B / 120B / 200B+      │  ║
-║  │                               │  │  256GB unified memory     │  ║
-║  └───────────────────────────────┘  └───────────────────────────┘  ║
+║  ┌─────────────────────────────────┐  ┌───────────────────────────┐  ║
+║  │  MS-S1 MAX (192.168.86.38)      │  │  Mac Studio M5 Ultra      │  ║
+║  │  Proxmox — Orchestration        │  │  (192.168.86.10)          │  ║
+║  │                                 │  │                           │  ║
+║  │  NemoClaw VM ──────────────────►│  │  Ollama                   │  ║
+║  │  Ollama LXC (fallback)          │  │  70B / 120B / 200B+       │  ║
+║  │                                 │  │  256GB unified memory     │  ║
+║  └─────────────────────────────────┘  └───────────────────────────┘  ║
 ╚══════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -570,22 +570,29 @@ Everything uses outbound-only connections — no ports forwarded on your router.
 
 ### Tailscale: Access Your Local LLM from Anywhere
 
+Install Tailscale **on the Ollama LXC** (not the Proxmox host) — this gives your phone
+direct access to port 11434 via its own Tailscale IP.
+
 ```bash
 # On Proxmox host
+pct enter 200
+
+# Inside Ollama LXC
 curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-tailscale ip -4   # Note your Tailscale IP (e.g. 100.64.0.1)
+tailscale up
+tailscale ip -4   # Note the Tailscale IP (e.g. 100.64.0.2)
 ```
 
-Install Tailscale on your phone (same account). Then:
+Install Tailscale on your phone (same Tailscale account). Then point your app directly at the LXC:
 
 ```
-Enchanted app (iOS) → Settings → Server URL → http://100.64.0.1:11434
+Enchanted app (iOS) → Settings → Server URL → http://100.64.0.2:11434
 ```
 
-Or access Open WebUI (run on the NemoClaw VM):
+Or run Open WebUI on the NemoClaw VM for a browser-based chat UI:
 
 ```bash
+# On the NemoClaw VM (ssh ubuntu@192.168.86.21)
 docker run -d \
   -p 8080:8080 \
   -e OLLAMA_BASE_URL=http://192.168.86.25:11434 \
@@ -594,7 +601,18 @@ docker run -d \
   ghcr.io/open-webui/open-webui:main
 ```
 
-Access from phone: `http://100.64.0.1:8080`
+Then install Tailscale on the NemoClaw VM too, and access Open WebUI from your phone:
+
+```bash
+# On NemoClaw VM
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up
+tailscale ip -4   # e.g. 100.64.0.3
+```
+
+```
+Browser on phone → http://100.64.0.3:8080
+```
 
 ---
 
@@ -785,9 +803,11 @@ Net:   vmbr0, VirtIO
 
 ```bash
 # On Proxmox host — download and import HAOS image
-wget https://github.com/home-assistant/operating-system/releases/latest/download/haos_ova-*.qcow2.xz
-xz -d haos_ova-*.qcow2.xz
-qm importdisk 101 haos_ova-*.qcow2 local-lvm
+HAOS_VER=$(curl -s https://api.github.com/repos/home-assistant/operating-system/releases/latest \
+  | grep '"tag_name"' | cut -d'"' -f4)
+wget "https://github.com/home-assistant/operating-system/releases/download/${HAOS_VER}/haos_ova-${HAOS_VER}.qcow2.xz"
+xz -d "haos_ova-${HAOS_VER}.qcow2.xz"
+qm importdisk 101 "haos_ova-${HAOS_VER}.qcow2" local-lvm
 ```
 
 In Proxmox UI: VM 101 → Hardware → Unused Disk → Edit → Add as `scsi0`, boot order to disk.
