@@ -90,15 +90,15 @@ running on hardware you own, with your data never leaving your home.
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                    HOME NETWORK (192.168.1.0/24)                     ║
+║                    HOME NETWORK (192.168.86.0/24)                     ║
 ║                          Google Nest Router                          ║
 ║                                                                      ║
 ║  ┌───────────────────────────────────────────────────────────────┐  ║
-║  │                  MS-S1 MAX (192.168.1.20)                     │  ║
+║  │                  MS-S1 MAX (192.168.86.38)                     │  ║
 ║  │                  Proxmox VE — Bare Metal                      │  ║
 ║  │                                                               │  ║
 ║  │  ┌──────────────────────────────────────────────────────┐    │  ║
-║  │  │  NemoClaw VM  (192.168.1.21)                         │    │  ║
+║  │  │  NemoClaw VM  (192.168.86.21)                         │    │  ║
 ║  │  │                                                      │    │  ║
 ║  │  │  OpenClaw agent          OpenShell sandbox           │    │  ║
 ║  │  │  WhatsApp gateway        Coding agent orchestration  │    │  ║
@@ -108,7 +108,7 @@ running on hardware you own, with your data never leaving your home.
 ║  │  └──────────────────────────────────────────────────────┘    │  ║
 ║  │                                                               │  ║
 ║  │  ┌──────────────────────────────────────────────────────┐    │  ║
-║  │  │  Ollama LXC  (192.168.1.25)                          │    │  ║
+║  │  │  Ollama LXC  (192.168.86.25)                          │    │  ║
 ║  │  │                                                      │    │  ║
 ║  │  │  Radeon 890M — full GPU, no sharing needed           │    │  ║
 ║  │  │  Qwen 2.5 Coder 32B  (agents, port 11434)            │    │  ║
@@ -137,11 +137,11 @@ running on hardware you own, with your data never leaving your home.
 
 ```
 ╔══════════════════════════════════════════════════════════════════════╗
-║                    HOME NETWORK (192.168.1.0/24)                     ║
+║                    HOME NETWORK (192.168.86.0/24)                     ║
 ║                                                                      ║
 ║  ┌───────────────────────────────┐  ┌───────────────────────────┐  ║
-║  │  MS-S1 MAX (192.168.1.20)     │  │  Mac Studio M5 Ultra      │  ║
-║  │  Proxmox — Orchestration      │  │  (192.168.1.10)           │  ║
+║  │  MS-S1 MAX (192.168.86.38)     │  │  Mac Studio M5 Ultra      │  ║
+║  │  Proxmox — Orchestration      │  │  (192.168.86.10)           │  ║
 ║  │                               │  │                           │  ║
 ║  │  NemoClaw VM ──────────────────┼─►│  Ollama                  │  ║
 ║  │  Ollama LXC (fallback)        │  │  70B / 120B / 200B+      │  ║
@@ -159,9 +159,9 @@ You (phone)
 OpenClaw Cloud Gateway  (dumb relay — moves bytes, never reads content)
     │
     ▼
-NemoClaw VM (192.168.1.21) — inside OpenShell sandbox
+NemoClaw VM (192.168.86.21) — inside OpenShell sandbox
     │  Phase 1: HTTP → integrate.api.nvidia.com (Nemotron 120B, free)
-    │  Phase 2: HTTP → 192.168.1.10:11434 (Mac Studio Ollama, local)
+    │  Phase 2: HTTP → 192.168.86.10:11434 (Mac Studio Ollama, local)
     ▼
 Response generated
     │
@@ -172,13 +172,13 @@ OpenClaw Cloud Gateway → WhatsApp → Your phone
 ## Network Design
 
 ```
-Google Nest Router (192.168.1.1)
+Google Nest Router (192.168.86.1)
     │
-    ├── MS-S1 MAX Proxmox host (192.168.1.20)
-    │       ├── NemoClaw VM    (192.168.1.21)
-    │       └── Ollama LXC     (192.168.1.25)
+    ├── MS-S1 MAX Proxmox host (192.168.86.38)
+    │       ├── NemoClaw VM    (192.168.86.21)
+    │       └── Ollama LXC     (192.168.86.25)
     │
-    ├── Mac Studio — Phase 2 (192.168.1.10)
+    ├── Mac Studio — Phase 2 (192.168.86.10)
     └── Your phones, laptops, etc.
 ```
 
@@ -186,8 +186,8 @@ Google Nest Router (192.168.1.1)
 
 | Device | IP | How to set |
 |--------|----|-----------|
-| MS-S1 MAX (Proxmox) | 192.168.1.20 | Nest app → Devices → Reserve IP |
-| Mac Studio (Phase 2) | 192.168.1.10 | Nest app → Devices → Reserve IP |
+| MS-S1 MAX (Proxmox) | 192.168.86.38 | Nest app → Devices → Reserve IP |
+| Mac Studio (Phase 2) | 192.168.86.10 | Nest app → Devices → Reserve IP |
 
 ---
 
@@ -270,17 +270,17 @@ Google Nest Router (192.168.1.1)
 
 ```
 Hostname:  proxmox.local
-IP:        192.168.1.20/24
-Gateway:   192.168.1.1
+IP:        192.168.86.38/24
+Gateway:   192.168.86.1
 DNS:       8.8.8.8
 ```
 
-5. Access Proxmox web UI: `https://192.168.1.20:8006`
+5. Access Proxmox web UI: `https://192.168.86.38:8006`
 
 ### Post-Install Hardening
 
 ```bash
-ssh root@192.168.1.20
+ssh root@192.168.86.38
 
 apt update && apt full-upgrade -y
 
@@ -294,8 +294,8 @@ apt update
 apt install -y ufw
 ufw default deny incoming
 ufw default allow outgoing
-ufw allow from 192.168.1.0/24 to any port 22
-ufw allow from 192.168.1.0/24 to any port 8006
+ufw allow from 192.168.86.0/24 to any port 22
+ufw allow from 192.168.86.0/24 to any port 8006
 ufw enable
 
 apt install -y unattended-upgrades
@@ -310,9 +310,9 @@ Phase 1 is two components on the MS-S1 MAX:
 
 | Component | Type | vCPU | RAM | Disk | IP | Purpose |
 |-----------|------|------|-----|------|----|---------|
-| NemoClaw VM | VM | 4 | 16GB | 80GB | 192.168.1.21 | OpenClaw + sandbox + coding agents |
-| Ollama LXC | LXC | 4 | 8GB* | 32GB | 192.168.1.25 | Local model inference |
-| **Proxmox host** | — | — | ~8GB | — | 192.168.1.20 | OS overhead |
+| NemoClaw VM | VM | 4 | 16GB | 80GB | 192.168.86.21 | OpenClaw + sandbox + coding agents |
+| Ollama LXC | LXC | 4 | 8GB* | 32GB | 192.168.86.25 | Local model inference |
+| **Proxmox host** | — | — | ~8GB | — | 192.168.86.38 | OS overhead |
 | **Model weights** | — | — | ~96GB | — | — | Unified memory pool |
 
 > \* 8GB covers Ollama process overhead only. Model weights load into the AMD Radeon 890M's
@@ -340,10 +340,10 @@ network:
   version: 2
   ethernets:
     ens18:
-      addresses: [192.168.1.21/24]
+      addresses: [192.168.86.21/24]
       routes:
         - to: default
-          via: 192.168.1.1
+          via: 192.168.86.1
       nameservers:
         addresses: [8.8.8.8]
 ```
@@ -364,7 +364,7 @@ sudo netplan apply
 ### Prerequisites on the NemoClaw VM
 
 ```bash
-ssh ubuntu@192.168.1.21
+ssh ubuntu@192.168.86.21
 
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER && newgrp docker
@@ -440,7 +440,7 @@ Template:   Ubuntu 22.04
 Disk:       32GB
 CPU:        4 cores
 RAM:        8192 MB
-Network:    vmbr0, IP 192.168.1.25/24, Gateway 192.168.1.1
+Network:    vmbr0, IP 192.168.86.25/24, Gateway 192.168.86.1
 Unprivileged: YES
 ```
 
@@ -506,8 +506,8 @@ ollama list
 
 ```bash
 # On Proxmox host
-iptables -A FORWARD -s 192.168.1.0/24 -d 192.168.1.25 -p tcp --dport 11434 -j ACCEPT
-iptables -A FORWARD -d 192.168.1.25 -j DROP
+iptables -A FORWARD -s 192.168.86.0/24 -d 192.168.86.25 -p tcp --dport 11434 -j ACCEPT
+iptables -A FORWARD -d 192.168.86.25 -j DROP
 apt install -y iptables-persistent
 netfilter-persistent save
 ```
@@ -548,7 +548,7 @@ sandbox$ nano ~/.openclaw/openclaw.json
         "api": "openai-completions"
       },
       "ollama": {
-        "baseUrl": "http://192.168.1.25:11434",
+        "baseUrl": "http://192.168.86.25:11434",
         "api": "ollama"
       }
     }
@@ -559,7 +559,7 @@ sandbox$ nano ~/.openclaw/openclaw.json
 ```bash
 # Allow Ollama in OpenShell policy (on NemoClaw VM host)
 openshell policy add --sandbox my-assistant \
-  --host 192.168.1.25 --port 11434 --protocol rest --name ollama-local
+  --host 192.168.86.25 --port 11434 --protocol rest --name ollama-local
 ```
 
 ---
@@ -588,7 +588,7 @@ Or access Open WebUI (run on the NemoClaw VM):
 ```bash
 docker run -d \
   -p 8080:8080 \
-  -e OLLAMA_BASE_URL=http://192.168.1.25:11434 \
+  -e OLLAMA_BASE_URL=http://192.168.86.25:11434 \
   --name open-webui \
   --restart unless-stopped \
   ghcr.io/open-webui/open-webui:main
@@ -632,7 +632,7 @@ Access from phone: `http://100.64.0.1:8080`
 ## 5.2 Mac Studio Setup
 
 - Mac Studio M5 Ultra (256GB) — recommended; M4 Ultra (192GB) available now
-- Wired ethernet to router, static IP: `192.168.1.10`
+- Wired ethernet to router, static IP: `192.168.86.10`
 
 ### macOS Hardening
 
@@ -677,7 +677,7 @@ sudo nano /etc/pf.anchors/ollama-protect
 ```
 
 ```
-pass in on en0 proto tcp from 192.168.1.0/24 to any port 11434
+pass in on en0 proto tcp from 192.168.86.0/24 to any port 11434
 pass in on utun0 proto tcp from 100.64.0.0/10 to any port 11434
 block in proto tcp to any port 11434
 ```
@@ -695,11 +695,11 @@ ollama pull qwen2.5:7b
 
 ```bash
 # NemoClaw sandbox — update openclaw.json
-"ollama": { "baseUrl": "http://192.168.1.10:11434" }
+"ollama": { "baseUrl": "http://192.168.86.10:11434" }
 
 # Allow Mac Studio in OpenShell policy
 openshell policy add --sandbox my-assistant \
-  --host 192.168.1.10 --port 11434 --protocol rest --name mac-studio-ollama
+  --host 192.168.86.10 --port 11434 --protocol rest --name mac-studio-ollama
 ```
 
 ## 5.4 Model Capabilities
@@ -725,7 +725,7 @@ holds even if a VM or OS firewall is misconfigured.
 
 | VLAN | Name | Subnet | Devices | Internet | Cross-VLAN |
 |------|------|--------|---------|----------|-----------|
-| 1 | Trusted | 192.168.1.0/24 | MS-S1 MAX, phones, laptops | Yes | Full |
+| 1 | Trusted | 192.168.86.0/24 | MS-S1 MAX, phones, laptops | Yes | Full |
 | 20 | Inference | 192.168.2.0/24 | Mac Studio only | No | VLAN 1 → port 11434 only |
 | 30 | IoT | 192.168.3.0/24 | Smart devices, cameras | No | None |
 
@@ -743,10 +743,10 @@ Rule 5: Allow VLAN 1 → VLAN 30, port 80/443
 
 | Device | Phase 2 IP | Phase 3 IP | VLAN |
 |--------|-----------|-----------|------|
-| MS-S1 MAX | 192.168.1.20 | 192.168.1.20 | 1 |
-| NemoClaw VM | 192.168.1.21 | 192.168.1.21 | 1 |
-| Ollama LXC | 192.168.1.25 | 192.168.1.25 | 1 |
-| Mac Studio | 192.168.1.10 | **192.168.2.10** | **20** |
+| MS-S1 MAX | 192.168.86.38 | 192.168.86.38 | 1 |
+| NemoClaw VM | 192.168.86.21 | 192.168.86.21 | 1 |
+| Ollama LXC | 192.168.86.25 | 192.168.86.25 | 1 |
+| Mac Studio | 192.168.86.10 | **192.168.2.10** | **20** |
 
 Update openclaw.json and OpenShell policy to `192.168.2.10` after Phase 3.
 
@@ -792,9 +792,9 @@ qm importdisk 101 haos_ova-*.qcow2 local-lvm
 
 In Proxmox UI: VM 101 → Hardware → Unused Disk → Edit → Add as `scsi0`, boot order to disk.
 
-Start the VM and access HA at `http://192.168.1.30:8123` after ~5 minutes.
+Start the VM and access HA at `http://192.168.86.30:8123` after ~5 minutes.
 
-Set static IP in Google Nest app: **Devices → HA VM → Reserve IP → 192.168.1.30**
+Set static IP in Google Nest app: **Devices → HA VM → Reserve IP → 192.168.86.30**
 
 ### Pass the Coral USB to the HA VM
 
@@ -845,7 +845,7 @@ Update the Proxmox host iptables to allow HA VM to reach both Ollama ports:
 
 ```bash
 # On Proxmox host — update firewall rules
-iptables -I FORWARD -s 192.168.1.0/24 -d 192.168.1.25 -p tcp --dport 11435 -j ACCEPT
+iptables -I FORWARD -s 192.168.86.0/24 -d 192.168.86.25 -p tcp --dport 11435 -j ACCEPT
 netfilter-persistent save
 ```
 
@@ -884,7 +884,7 @@ cameras:
 
 ```
 Settings → Devices & Services → Add Integration → Ollama
-Host: http://192.168.1.25:11435
+Host: http://192.168.86.25:11435
 Model: qwen2.5:7b
 ```
 
@@ -942,7 +942,7 @@ Template:   Ubuntu 22.04
 Disk:       32GB
 CPU:        4 cores
 RAM:        4096 MB
-Network:    vmbr0, IP 192.168.1.22/24, Gateway 192.168.1.1
+Network:    vmbr0, IP 192.168.86.22/24, Gateway 192.168.86.1
 Unprivileged: YES
 ```
 
@@ -966,7 +966,7 @@ curl -fsSL https://repo.jellyfin.org/install-debuntu.sh | sudo bash
 sudo systemctl enable jellyfin && sudo systemctl start jellyfin
 ```
 
-Access Jellyfin: `http://192.168.1.22:8096`
+Access Jellyfin: `http://192.168.86.22:8096`
 
 Enable hardware transcoding:
 ```
@@ -1020,10 +1020,10 @@ handles this well) or are satisfied with 32K context.
 
 ```bash
 # Ollama running
-curl http://192.168.1.25:11434/api/tags
+curl http://192.168.86.25:11434/api/tags
 
 # Context window configured
-curl http://192.168.1.25:11434/api/show -d '{"name":"qwen2.5-coder:32b"}' | grep num_ctx
+curl http://192.168.86.25:11434/api/show -d '{"name":"qwen2.5-coder:32b"}' | grep num_ctx
 
 # Ollama not reachable from internet (test on cellular)
 curl --connect-timeout 5 http://YOUR_PUBLIC_IP:11434/api/tags
@@ -1045,7 +1045,7 @@ nemoclaw my-assistant logs -f   # Watch live
 
 ```bash
 # HA Ollama instance
-curl http://192.168.1.25:11435/api/tags
+curl http://192.168.86.25:11435/api/tags
 
 # Coral detected in Frigate
 # Settings → Devices → Frigate → Detectors → coral should show "active"
@@ -1054,8 +1054,8 @@ curl http://192.168.1.25:11435/api/tags
 ## Phase 2 Checks
 
 ```bash
-curl http://192.168.1.10:11434/api/tags
-curl http://192.168.1.10:11434/api/show -d '{"name":"llama3.1:70b"}' | grep num_ctx
+curl http://192.168.86.10:11434/api/tags
+curl http://192.168.86.10:11434/api/show -d '{"name":"llama3.1:70b"}' | grep num_ctx
 ```
 
 ---
@@ -1079,10 +1079,10 @@ systemctl status ollama-ha
 ## Monthly
 
 ```bash
-ssh root@192.168.1.20
+ssh root@192.168.86.38
 apt update && apt full-upgrade -y
 
-ssh ubuntu@192.168.1.21 "sudo apt update && sudo apt upgrade -y"
+ssh ubuntu@192.168.86.21 "sudo apt update && sudo apt upgrade -y"
 
 pct enter 200
 apt update && apt upgrade -y
@@ -1115,12 +1115,12 @@ done
 >
 > | Device | IP | Phase 3 IP | Notes |
 > |--------|----|-----------|-------|
-> | MS-S1 MAX (Proxmox) | 192.168.1.20 | 192.168.1.20 | Always VLAN 1 |
-> | NemoClaw VM | 192.168.1.21 | 192.168.1.21 | Always VLAN 1 |
-> | Ollama LXC | 192.168.1.25 | 192.168.1.25 | Always VLAN 1 |
-> | Mac Studio (Phase 2) | 192.168.1.10 | 192.168.2.10 | Moves to VLAN 20 |
-> | HA VM (Phase 4) | 192.168.1.30 | 192.168.1.30 | VLAN 1 |
-> | Media Server LXC (Phase 5) | 192.168.1.22 | 192.168.1.22 | VLAN 1 |
+> | MS-S1 MAX (Proxmox) | 192.168.86.38 | 192.168.86.38 | Always VLAN 1 |
+> | NemoClaw VM | 192.168.86.21 | 192.168.86.21 | Always VLAN 1 |
+> | Ollama LXC | 192.168.86.25 | 192.168.86.25 | Always VLAN 1 |
+> | Mac Studio (Phase 2) | 192.168.86.10 | 192.168.2.10 | Moves to VLAN 20 |
+> | HA VM (Phase 4) | 192.168.86.30 | 192.168.86.30 | VLAN 1 |
+> | Media Server LXC (Phase 5) | 192.168.86.22 | 192.168.86.22 | VLAN 1 |
 
 ---
 
