@@ -318,13 +318,13 @@ DNS:       8.8.8.8
 ### Step 5: Reserve the Static IP
 
 Before the machine reboots and comes up on the network:
-- Open the **Google Home app** → Wi-Fi → Devices → find the MS-S1 MAX → Reserve IP → set to `192.168.1.20`
+- Open the **Google Home app** → Wi-Fi → Devices → find the MS-S1 MAX → Reserve IP → set to `192.168.86.38`
 
 ### Step 6: Access Proxmox Web UI
 
 On your laptop, open a browser and go to:
 ```
-https://192.168.1.20:8006
+https://192.168.86.38:8006
 ```
 
 You'll get a self-signed certificate warning — click through it. Log in with:
@@ -586,7 +586,7 @@ Verify the new IP is active:
 
 ```bash
 ip addr show ens18
-# Should show: inet 192.168.1.21/24
+# Should show: inet 192.168.86.21/24
 ```
 
 ### Step 4: Verify SSH Access from Your Laptop
@@ -594,7 +594,7 @@ ip addr show ens18
 Open a terminal on your laptop:
 
 ```bash
-ssh ubuntu@192.168.1.21
+ssh ubuntu@192.168.86.21
 ```
 
 If it connects and shows the Ubuntu prompt, you're good. You can close the noVNC console in Proxmox and work entirely from SSH from here on.
@@ -605,10 +605,10 @@ If it connects and shows the Ubuntu prompt, you're good. You can close the noVNC
 > ssh-keygen -t ed25519 -C "your_email@example.com"
 >
 > # Copy your public key to the VM
-> ssh-copy-id ubuntu@192.168.1.21
+> ssh-copy-id ubuntu@192.168.86.21
 >
 > # Now test — should log in without a password
-> ssh ubuntu@192.168.1.21
+> ssh ubuntu@192.168.86.21
 > ```
 
 ### Step 5: Basic System Hardening
@@ -623,7 +623,7 @@ sudo apt install -y curl wget git htop unzip ufw
 # Firewall — allow SSH only from your LAN
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
-sudo ufw allow from 192.168.1.0/24 to any port 22
+sudo ufw allow from 192.168.86.0/24 to any port 22
 sudo ufw --force enable
 
 # Auto security updates
@@ -865,8 +865,8 @@ Swap:    2048
 Name:     eth0
 Bridge:   vmbr0
 IPv4:     Static
-IPv4/CIDR: 192.168.1.25/24
-Gateway:  192.168.1.1
+IPv4/CIDR: 192.168.86.25/24
+Gateway:  192.168.86.1
 ```
 
 **DNS tab:**
@@ -883,7 +883,7 @@ DNS servers: 8.8.8.8
 SSH into the Proxmox host:
 
 ```bash
-ssh root@192.168.1.20
+ssh root@192.168.86.38
 nano /etc/pve/lxc/200.conf
 ```
 
@@ -1002,8 +1002,8 @@ netfilter-persistent save
 Verify from the NemoClaw VM that Ollama is reachable:
 
 ```bash
-ssh ubuntu@192.168.1.21
-curl http://192.168.1.25:11434/api/tags
+ssh ubuntu@192.168.86.21
+curl http://192.168.86.25:11434/api/tags
 # Should return JSON with your model list
 ```
 
@@ -1156,7 +1156,7 @@ Browser on phone → http://100.64.0.3:8080
 
 ### Ollama LXC
 - [ ] Only accessible from NemoClaw VM and Proxmox host
-- [ ] Not reachable from your phone/laptop (test: `curl --connect-timeout 5 http://192.168.1.25:11434/api/tags` from your laptop — should fail)
+- [ ] Not reachable from your phone/laptop (test: `curl --connect-timeout 5 http://192.168.86.25:11434/api/tags` from your laptop — should fail)
 
 ---
 
@@ -1411,14 +1411,14 @@ pct start 101   # or click Start in the web UI
 
 Wait 3–5 minutes for first boot. Then open:
 ```
-http://192.168.1.30:8123
+http://192.168.86.30:8123
 ```
 
 *(Proxmox will report the HAOS VM's IP via the guest agent once HA is running)*
 
 Complete the HA onboarding wizard in the browser.
 
-Set static IP: Google Home app → Wi-Fi → Devices → find the HA VM → Reserve IP → `192.168.1.30`
+Set static IP: Google Home app → Wi-Fi → Devices → find the HA VM → Reserve IP → `192.168.86.30`
 
 ### Step 5: Pass the Coral USB to the HA VM
 
@@ -1581,7 +1581,7 @@ Click **Finish** — do NOT start yet.
 Add the GPU bind-mount:
 
 ```bash
-ssh root@192.168.1.20
+ssh root@192.168.86.38
 nano /etc/pve/lxc/202.conf
 ```
 
