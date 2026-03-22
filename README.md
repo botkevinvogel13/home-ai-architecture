@@ -15,6 +15,7 @@
   - [4.1 MS-S1 MAX: OS & Proxmox](#41-ms-s1-max-os--proxmox)
   - [4.2 Component Design](#42-component-design)
   - [4.3 Create the NemoClaw VM](#43-create-the-nemoclaw-vm)
+    - [GPU Passthrough for Strix Halo](#step-3b-gpu-passthrough-for-the-nemoclaw-vm-strix-halo--amd-ryzen-ai-max)
   - [4.4 Ubuntu Setup Inside the VM](#44-ubuntu-setup-inside-the-vm)
   - [4.5 NemoClaw + OpenClaw](#45-nemoclaw--openclaw)
   - [4.6 Ollama + Local Models](#46-ollama--local-models)
@@ -395,6 +396,14 @@ Phase 1 is two components on the MS-S1 MAX:
 
 ## 4.3 Create the NemoClaw VM
 
+> **Why a VM and not an LXC?**
+> NemoClaw uses NVIDIA OpenShell for sandboxing. OpenShell requires a full Linux kernel with
+> strict process and namespace isolation — it enforces network egress policy, filesystem
+> containment, and syscall filtering at a level that LXC containers can't provide (LXC shares
+> the host kernel and its namespace separation is weaker). A VM gives OpenShell a clean,
+> isolated kernel boundary it can fully control. This is the same reason the NemoClaw README
+> spins up a lightweight Linux VM on macOS instead of using containers.
+
 ### Step 1: Download the Ubuntu ISO into Proxmox
 
 In the Proxmox web UI:
@@ -482,6 +491,198 @@ Click **Finish**. The VM is created but not started yet.
 1. In the left panel, click **100 (nemoclaw)**
 2. Click **Start** (top right)
 3. Click **Console** — a noVNC window opens showing the Ubuntu installer
+
+---
+
+### Step 3b: GPU Passthrough for the NemoClaw VM (Strix Halo / AMD Ryzen AI Max)
+
+> **Do this before installing Ubuntu** if you want the NemoClaw VM to use the AMD
+> Radeon 890M / 8060S directly for local inference (instead of routing through the
+> Ollama LXC). Skip this section if you're using NVIDIA cloud inference only.
+>
+> **Known limitations on Strix Halo:**
+> - The iGPU can only be passed through to a **Windows VM once per host boot** (the "reset bug").
+>   Linux VMs are more forgiving on Proxmox 9+ with recent kernels (6.15+).
+> - Dynamic VRAM allocation is unstable — set a fixed VRAM amount in the BIOS and never
+>   change it at the OS level.
+> - You must supply your own extracted VBIOS — someone else's dump may not work.
+
+#### 1. Blacklist AMD GPU Drivers on the Proxmox Host
+
+The host must not load the AMD GPU drivers, otherwise it will grab the GPU before VFIO
+can claim it and the VM will hang on boot.
+
+SSH into the Proxmox host:
+
+```bash
+ssh root@192.168.86.38
+```
+
+Create the blacklist file:
+
+```bash
+cat > /etc/modprobe.d/pve-blacklist.conf << 'EOF'
+blacklist radeon
+blacklist amdgpu
+blacklist snd_hda_intel
+EOF
+```
+
+Tell VFIO which PCI IDs to claim. Find your GPU's IDs first:
+
+```bash
+lspci -nn | grep -i amd
+# Look for lines like:
+# c5:00.0 VGA compatible controller [0300]: Advanced Micro Devices ... [1002:1586]
+# c5:00.1 Audio device [0403]: Advanced Micro Devices ... [1002:1640]
+```
+
+Create the VFIO config with those IDs:
+
+```bash
+cat > /etc/modprobe.d/vfio.conf << 'EOF'
+options vfio-pci ids=1002:1586,1002:1640 disable_vga=1
+EOF
+```
+
+> Replace `1002:1586,1002:1640` with the IDs from your `lspci` output if they differ.
+
+Rebuild the initramfs and set the kernel cmdline:
+
+```bash
+# Add initcall_blacklist to prevent framebuffer from claiming the GPU at boot
+echo "$(cat /etc/kernel/cmdline) initcall_blacklist=sysfb_init" > /etc/kernel/cmdline
+
+update-initramfs -u -k all
+proxmox-boot-tool refresh
+```
+
+Reboot the Proxmox host:
+
+```bash
+reboot
+```
+
+After reboot, verify VFIO claimed the GPU (not the host driver):
+
+```bash
+lspci -k | grep -A3 "VGA\|Audio" | grep "Kernel driver in use"
+# Should show: vfio-pci
+# NOT: amdgpu or radeon
+```
+
+#### 2. Extract Your VBIOS
+
+The Strix Halo iGPU requires a VBIOS ROM file injected at passthrough time. Without it,
+the VM will hang during boot. You must extract it from your specific machine — a VBIOS
+from another machine may not work.
+
+```bash
+# On the Proxmox host — find the GPU's PCI address
+lspci -nn | grep "VGA" | grep AMD
+# e.g.: c5:00.0 VGA ...
+
+# Extract the VBIOS (replace c5:00.0 with your address)
+cd /usr/share/kvm/
+echo 1 > /sys/bus/pci/devices/0000:c5:00.0/rom
+cat /sys/bus/pci/devices/0000:c5:00.0/rom > vbios.bin
+echo 0 > /sys/bus/pci/devices/0000:c5:00.0/rom
+
+# Verify the file exists and has content
+ls -lh vbios.bin
+# Should be ~128KB to ~512KB — if it's 0 bytes, something went wrong
+```
+
+> If the `rom` file doesn't exist, your GPU may not expose it at that path. In that case,
+> download a VBIOS extraction tool (`amdvbflash`) or find a pre-extracted VBIOS for your
+> exact board revision from the Strix Halo community (strixhalo.wiki has some for the
+> Bosgame M5 and EVO-X2).
+
+#### 3. Add PCI Devices to the VM — Use Separate Entries, Not "All Functions"
+
+> **Important:** Do NOT use the "All Functions" checkbox in the Proxmox UI for Strix Halo.
+> It doesn't let you set `rombar=0` on the audio device individually, and passing the audio
+> device with rombar enabled causes boot hangs. Add each PCI function as a separate entry.
+
+SSH into the Proxmox host and edit the VM config directly:
+
+```bash
+nano /etc/pve/qemu-server/100.conf
+```
+
+Find the PCI addresses for the iGPU, its audio device, and the USB controller in the
+same IOMMU group:
+
+```bash
+# List IOMMU groups to find what's grouped with your GPU
+find /sys/kernel/iommu_groups/ -type l | sort -V | while read f; do
+  printf "Group $(basename $(dirname $f)): "
+  lspci -nns $(basename $f)
+done | grep -A5 "$(lspci -nn | grep VGA | grep AMD | awk '{print $1}')"
+```
+
+Add these lines to `/etc/pve/qemu-server/100.conf` (adjust PCI addresses to match your output):
+
+```
+# GPU passthrough — Strix Halo iGPU
+# Replace c5:00.X with the actual PCI addresses from your lspci output
+hostpci0: 0000:c5:00.0,pcie=1,romfile=vbios.bin,x-vga=1
+hostpci1: 0000:c5:00.1,pcie=1,rombar=0
+hostpci2: 0000:c5:00.4,pcie=1,rombar=0
+```
+
+| Setting | Meaning |
+|---------|---------|
+| `romfile=vbios.bin` | Injects the extracted VBIOS — required for Strix Halo |
+| `x-vga=1` | Marks this as the primary GPU — required, VM hangs without it |
+| `rombar=0` on audio/USB | Hides the ROM bar — prevents boot hangs on those devices |
+| Separate entries | Allows different settings per function — "All Functions" checkbox can't do this |
+
+Also ensure the VM uses `q35` machine type and `host` CPU type (already set in Step 2 above).
+
+#### 4. Start the VM
+
+```bash
+qm start 100
+```
+
+Watch the console via Proxmox web UI. The VM should POST and reach the Ubuntu installer
+(or boot Ubuntu if already installed). If it hangs:
+
+- **Black screen / no POST:** VBIOS is missing or wrong — re-extract or try a different dump
+- **Hangs at "Loading initial ramdisk":** Host drivers weren't blacklisted properly — re-check `/etc/modprobe.d/pve-blacklist.conf` and rebuild initramfs
+- **GPU not visible inside VM:** Run `lspci` inside the VM — if the AMD GPU doesn't appear, check that VFIO claimed it on the host (`lspci -k | grep vfio`)
+
+#### 5. Inside the VM: Kernel Requirements
+
+Once Ubuntu is installed inside the VM, ensure you're on a recent enough kernel:
+
+```bash
+# Inside the NemoClaw VM
+uname -r
+# Needs to be 6.15 or newer for Strix Halo amdgpu driver support
+```
+
+If the kernel is older, upgrade:
+
+```bash
+sudo apt update && sudo apt install -y linux-generic-hwe-22.04
+sudo reboot
+```
+
+After reboot, verify the GPU is visible:
+
+```bash
+lspci | grep -i amd
+# Should show the Radeon GPU
+
+# Check amdgpu loaded
+lsmod | grep amdgpu
+
+# Check render node exists
+ls /dev/dri/
+# Should show: card0  renderD128
+```
 
 ---
 
