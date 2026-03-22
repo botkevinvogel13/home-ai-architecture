@@ -756,17 +756,40 @@ sudo systemctl start qemu-guest-agent
 
 ### Step 3: Set a Static IP
 
+First, find your actual interface name — it varies by machine:
+
+```bash
+ip link show
+# Look for something like: ens18, enp6s18, eth0
+# It will NOT be lo (that's loopback)
+```
+
+> **Note:** The interface is commonly `ens18` but on some hardware (including the MS-S1 MAX)
+> it shows up as `enp6s18`. Use whatever `ip link show` reports — replace `ens18` in all
+> commands below with your actual interface name.
+
+If the interface has no IP yet (no inet address), bring it up and grab a DHCP lease first so you can SSH in:
+
+```bash
+sudo ip link set enp6s18 up   # use your interface name
+sudo dhclient enp6s18
+ip addr show enp6s18
+# Should now show a DHCP IP — use this to SSH in from your laptop
+```
+
+Now set the static IP:
+
 ```bash
 sudo nano /etc/netplan/00-installer-config.yaml
 ```
 
-Replace the entire file contents with:
+Replace the entire file contents with (substituting your interface name):
 
 ```yaml
 network:
   version: 2
   ethernets:
-    ens18:
+    enp6s18:        # ← replace with your interface name from ip link show
       addresses: [192.168.86.21/24]
       routes:
         - to: default
@@ -786,7 +809,7 @@ sudo netplan apply
 Verify the new IP is active:
 
 ```bash
-ip addr show ens18
+ip addr show enp6s18   # use your interface name
 # Should show: inet 192.168.86.21/24
 ```
 
