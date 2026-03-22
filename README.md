@@ -900,10 +900,7 @@ You need two things before running the installer:
 - Sign in with (or create) an NVIDIA developer account — it's free
 - Copy the key — looks like `nvapi-xxxxxxxxxxxxxxxxxxxx`
 
-**2. OpenClaw Subscription**
-- Go to [openclaw.ai](https://openclaw.ai) and create an account
-- Subscribe to a plan
-- Note your login email and password — the NemoClaw wizard will ask for them
+**2. OpenClaw** — set up during the NemoClaw onboard wizard, no separate account needed beforehand
 
 ### Step 1: Install NemoClaw
 
